@@ -684,10 +684,12 @@ function renderHome() {
   app.innerHTML = loadingHtml('正在眺望你的岛屿…');
   Promise.all([
     api('/home/summary'),
-    api('/island').catch(function () { return null; })
+    api('/island').catch(function () { return null; }),
+    api('/starred?per_page=1').catch(function () { return null; })
   ]).then(function (res) {
     var d = res[0] || {};
     var isl = res[1];
+    var starredTotal = (res[2] && res[2].total) || 0;
     var username = d.username || localStorage.getItem('yuyu_username') || '';
     var learned = d.today_learned || 0;
     var goal = d.daily_goal || 30;
@@ -724,6 +726,10 @@ function renderHome() {
           '<div class="num">' + due + '</div>' +
           '<div class="label">待复习</div><div class="go">去复习 →</div>' +
         '</div>' +
+        '<div class="glass task-card" id="go-starred">' +
+          '<div class="num">' + starredTotal + '</div>' +
+          '<div class="label">生词本</div><div class="go">去复习 →</div>' +
+        '</div>' +
       '</div>' +
 
       '<div class="glass checkin-card">' +
@@ -743,6 +749,8 @@ function renderHome() {
 
     $('#go-study').addEventListener('click', function () { location.hash = '#/study'; });
     $('#go-review').addEventListener('click', function () { location.hash = '#/review'; });
+    var gs = $('#go-starred');
+    if (gs) gs.addEventListener('click', function () { location.hash = '#/starred'; });
     var cb = $('#btn-checkin');
     if (cb) cb.addEventListener('click', function () {
       cb.disabled = true; cb.textContent = '打卡中…';
