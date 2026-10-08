@@ -238,6 +238,7 @@ class QuizStartIn(BaseModel):
     level: str = "N5"
     count: int = Field(default=20, ge=1, le=50)
     word_ids: list[str] | None = None
+    mode: str = "normal"  # normal | exam_freq | jees_sample
 
 
 class QuizAnswerItem(BaseModel):
@@ -623,14 +624,67 @@ def quiz_start(body: QuizStartIn, user: dict = Depends(current_user)):
             if not rows:
                 raise HTTPException(status_code=400, detail="no valid words for word_ids")
         else:
-            rows = [dict(r) for r in conn.execute(
-                "SELECT * FROM words WHERE level=?", (level,)
-            ).fetchall()]
-            if not rows:
-                raise HTTPException(status_code=400, detail="no words for level")
+            if body.mode == "exam_freq":
+                # 真题高频模式: 按考频加权抽题 (high 权重 4, mid 2, low 1, null 0.5)
+                rows = [dict(r) for r in conn.execute(
+                    "SELECT * FROM words WHERE level=? AND exam_freq IS NOT NULL", (level,)
+                ).fetchall()]
+                if not rows:
+                    rows = [dict(r) for r in conn.execute(
+                        "SELECT * FROM words WHERE level=?", (level,)
+                    ).fetchall()]
+                if not rows:
+                    raise HTTPException(status_code=400, detail="no words for level")
+            elif body.mode == "jees_sample":
+                # 官方样题模式: 从 sample_questions 取题 (前端直接渲染, 不走词汇出题逻辑)
+                sq = [dict(r) for r in conn.execute(
+                    "SELECT * FROM sample_questions WHERE level=? ORDER BY RANDOM() LIMIT ?",
+                    (level, body.count),
+                ).fetchall()]
+                if not sq:
+                    raise HTTPException(status_code=400, detail="no sample questions for level")
+                questions = []
+                for s in sq:
+                    qid = uuid.uuid4().hex
+                    opts = json.loads(s["options"])
+                    QUIZ_STORE[(user["id"], qid)] = {
+                        "word_id": None, "type": "sample",
+                        "expected": opts[s["answer"]], "sample_id": s["id"],
+                    }
+                    questions.append({
+                        "qid": qid, "type": "sample", "word_id": None,
+                        "prompt": {"stem": s["stem"], "section": s["section"]},
+                        "options": opts, "source": "jees-sample",
+                    })
+                return {"questions": questions, "mode": "jees_sample"}
+            else:
+                rows = [dict(r) for r in conn.execute(
+                    "SELECT * FROM words WHERE level=?", (level,)
+                ).fetchall()]
+                if not rows:
+                    raise HTTPException(status_code=400, detail="no words for level")
     finally:
         conn.close()
-    sample = random.sample(rows, min(body.count, len(rows)))
+    if body.mode == "exam_freq" and rows:
+        weights = {"high": 4.0, "mid": 2.0, "low": 1.0}
+        wts = [weights.get(r.get("exam_freq"), 0.5) for r in rows]
+        n = min(body.count, len(rows))
+        # 加权不放回抽样
+        sample = []
+        pool = rows[:]
+        pool_w = wts[:]
+        for _ in range(n):
+            total = sum(pool_w)
+            r = random.random() * total
+            acc = 0
+            for i, wt in enumerate(pool_w):
+                acc += wt
+                if r <= acc:
+                    sample.append(pool.pop(i))
+                    pool_w.pop(i)
+                    break
+    else:
+        sample = random.sample(rows, min(body.count, len(rows)))
     questions = []
     for idx, w in enumerate(sample):
         t = QUIZ_TYPES[idx % len(QUIZ_TYPES)]
