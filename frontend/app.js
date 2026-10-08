@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '0.7.0';
+var APP_VERSION = '0.8.0';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -1006,6 +1006,10 @@ function renderShelf(books, summary, isl) {
       '<div class="shelf">' + g.books.map(cardHtml).join('') + '</div>';
   });
   html += '<div class="shelf-note muted">顺序学习按书内顺序稳步推进 · 打乱顺序随机出词</div>';
+  html += '<a href="#/starred" class="glass starred-entry" style="display:flex;align-items:center;gap:12px;padding:14px 16px;margin-top:14px;text-decoration:none;color:inherit">' +
+    '<span style="font-size:22px">★</span>' +
+    '<span style="flex:1"><b>生词本</b><br><span class="muted" style="font-size:12px">收藏的难词，集中复习</span></span>' +
+    '<span class="chev">›</span></a>';
   app.innerHTML = html;
 
   if (!hasData) toast('书架数据暂不可用，可直接选书开始');
@@ -1126,6 +1130,7 @@ function wordCardHtml(w, showMeaning) {
   var badge = (showMeaning && w.meaning_is_en_fallback)
     ? '<span class="badge-en">英文暂代</span>' : '';
   return '<div class="glass word-card" id="word-card">' +
+    starBtnHtml(w.id) +
     (w.pos ? '<div><span class="word-pos">' + esc(w.pos) + '</span></div>' : '') +
     '<div class="word-kanji">' + wordFaceRuby(w) + '</div>' +
     (w.romaji ? '<div class="word-romaji">' + esc(w.romaji) + '</div>' : '') +
@@ -1196,6 +1201,7 @@ function renderStudyWord() {
     '<div id="study-actions" style="margin-top:16px">' + actions + '</div>';
 
   bindWordCard(w);
+  bindAllStarBtns(app);
   var db = $('#btn-detail');
   if (db) db.addEventListener('click', function () { openWordDetail(w.id); });
   var bb = $('#btn-back');
@@ -1239,6 +1245,44 @@ function bindWordCard(w, type) {
   var rp = $('#btn-replay');
   if (rp) rp.addEventListener('click', function () { speak(w.kana, w.id); });
   if (type === 'listening') later(function () { speak(w.kana, w.id); }, 600); // 自动朗读
+}
+
+/* ================= v0.8 生词本：星标组件 ================= */
+function starBtnHtml(wordId) {
+  return '<button class="star-btn" data-wid="' + esc(wordId) + '" aria-label="收藏">☆</button>';
+}
+function paintStarBtn(btn, starred) {
+  btn.classList.toggle('starred', !!starred);
+  btn.textContent = starred ? '★' : '☆';
+}
+function bindStarBtn(btn) {
+  if (!btn || btn._starBound) return;
+  btn._starBound = true;
+  var wid = btn.getAttribute('data-wid');
+  api('/star/' + encodeURIComponent(wid)).then(function (d) {
+    paintStarBtn(btn, d.starred);
+  }).catch(function () { /* 忽略回显失败 */ });
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    btn.disabled = true;
+    api('/star/' + encodeURIComponent(wid), 'POST').then(function (d) {
+      paintStarBtn(btn, d.starred);
+      toast(d.starred ? '已加入生词本 ★' : '已取消收藏');
+      // 若在生词本列表页取消，刷新列表
+      if (!d.starred && typeof refreshStarredList === 'function' && currentRoute() === 'starred') {
+        refreshStarredList();
+      }
+    }).catch(function (err) {
+      toast((err && err.message) || '操作失败');
+    }).then(function () { btn.disabled = false; });
+  });
+}
+/* 绑定容器内所有星标按钮 */
+function bindAllStarBtns(root) {
+  (root || document).querySelectorAll('.star-btn').forEach(function (b) {
+    bindStarBtn(b);
+  });
 }
 
 /* 作答绑定；isQuiz 为 true 时走 quiz 流程（v0.3：纯选择题，无打字） */
@@ -1384,6 +1428,87 @@ function renderStudyDone() {
 }
 routes['study'] = renderStudy;
 
+/* ================= v0.8 页面：生词本 ================= */
+var STARRED_PAGE = 1;
+var STARRED_PER = 50;
+
+function masteryLabel(m) {
+  return m === 2 ? '已掌握' : (m === 1 ? '学习中' : '未学习');
+}
+
+function renderStarred() {
+  STARRED_PAGE = 1;
+  app.innerHTML = loadingHtml('正在取生词本…');
+  refreshStarredList();
+}
+
+function refreshStarredList() {
+  api('/starred?page=' + STARRED_PAGE + '&per_page=' + STARRED_PER).then(function (d) {
+    var items = d.items || [];
+    var total = d.total || 0;
+    var pages = Math.max(1, Math.ceil(total / STARRED_PER));
+    var h = '<div class="page-head"><h2>生词本 ★</h2>' +
+      '<p class="muted">' + total + ' 个收藏' + '</p></div>';
+    if (!items.length) {
+      h += '<div class="empty-state">' + sakuraArt(110) +
+        '<h3>生词本还是空的</h3><p>学习时点右上角 ☆，难词就收进来了。</p>' +
+        '<a href="#/study" class="btn btn-primary" style="text-decoration:none">去背词</a></div>';
+    } else {
+      h += '<button class="btn btn-primary" id="btn-starred-review" style="width:100%;margin-bottom:6px">复习生词（' + total + '）</button>';
+      h += '<div class="starred-list">' + items.map(function (w) {
+        return '<div class="glass starred-item">' +
+          '<span class="mastery-dot mastery-' + (w.mastery || 0) + '" title="' + masteryLabel(w.mastery || 0) + '"></span>' +
+          '<div style="flex:1;min-width:0" data-act="detail" data-wid="' + esc(w.id) + '">' +
+            '<div class="sk">' + esc(w.kanji || w.kana) + '</div>' +
+            '<div class="sm">' + esc(w.kana) + ' · ' + esc(w.display_meaning || '') + '</div>' +
+          '</div>' +
+          starBtnHtml(w.id) +
+        '</div>';
+      }).join('') + '</div>';
+      if (pages > 1) {
+        h += '<div style="display:flex;justify-content:center;gap:12px;margin-top:16px;align-items:center">' +
+          '<button class="btn btn-ghost btn-sm" id="pg-prev"' + (STARRED_PAGE <= 1 ? ' disabled' : '') + '>← 上一页</button>' +
+          '<span class="muted">' + STARRED_PAGE + ' / ' + pages + '</span>' +
+          '<button class="btn btn-ghost btn-sm" id="pg-next"' + (STARRED_PAGE >= pages ? ' disabled' : '') + '>下一页 →</button>' +
+        '</div>';
+      }
+    }
+    app.innerHTML = h;
+    bindAllStarBtns(app);
+    // 点词条看详解
+    app.querySelectorAll('[data-act="detail"]').forEach(function (el) {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', function () { openWordDetail(el.getAttribute('data-wid')); });
+    });
+    var rb = $('#btn-starred-review');
+    if (rb) rb.addEventListener('click', startStarredReview);
+    var pp = $('#pg-prev'), pn = $('#pg-next');
+    if (pp) pp.addEventListener('click', function () { if (STARRED_PAGE > 1) { STARRED_PAGE--; refreshStarredList(); } });
+    if (pn) pn.addEventListener('click', function () { if (STARRED_PAGE < pages) { STARRED_PAGE++; refreshStarredList(); } });
+  }).catch(function (err) {
+    app.innerHTML = '<div class="loading">加载失败：' + esc(err.message) + '</div>';
+  });
+}
+
+/* 生词本复习：取全部收藏词，走现有复习翻牌流程 */
+function startStarredReview() {
+  app.innerHTML = loadingHtml('正在准备生词…');
+  api('/starred?page=1&per_page=200').then(function (d) {
+    var words = d.items || [];
+    if (!words.length) { toast('生词本是空的'); return; }
+    // 打乱顺序
+    for (var i = words.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = words[i]; words[i] = words[j]; words[j] = t;
+    }
+    RV = { words: words, idx: 0, done: 0, flipped: false, grades: {}, fromStarred: true };
+    renderReviewCard();
+  }).catch(function (err) {
+    toast(err.message || '加载失败');
+  });
+}
+routes['starred'] = renderStarred;
+
 /* ================= 9. 页面：复习 ================= */
 var RV = null;
 
@@ -1449,6 +1574,7 @@ function renderReviewCard() {
     Math.round(RV.idx / RV.words.length * 100) + '%"></i></div>' +
     '<div class="txt">' + (RV.idx + 1) + ' / ' + RV.words.length + ' · 复习翻牌</div></div>' + nav +
     '<div class="glass word-card" id="review-card">' +
+      starBtnHtml(w.id) +
       '<div class="word-kanji">' + wordFaceRuby(w) + '</div>' +
       (w.romaji ? '<div class="word-romaji">' + esc(w.romaji) + '</div>' : '') +
       '<div><button class="speaker-btn" id="btn-speak" aria-label="朗读">' + SPEAKER_SVG + '</button></div>' +
@@ -1459,6 +1585,7 @@ function renderReviewCard() {
     '<div style="margin-top:10px"><button class="btn btn-ghost" id="btn-detail" style="width:100%">查看详解 · 音形义用记</button></div>';
 
   $('#btn-speak').addEventListener('click', function () { speak(w.kana, w.id); });
+  bindAllStarBtns(app);
   var rb = $('#btn-rv-back');
   if (rb) rb.addEventListener('click', function () { if (RV.idx > 0) { RV.idx--; renderReviewCard(); } });
   var rvex = $('#btn-rv-exit');
@@ -1574,8 +1701,10 @@ function openWordDetail(wordId) {
       );
     }
     var sheet = ov.querySelector('.detail-sheet');
-    sheet.innerHTML = '<button class="detail-close" id="detail-close" aria-label="关闭">✕</button>' + secs.join('');
+    sheet.innerHTML = '<button class="detail-close" id="detail-close" aria-label="关闭">✕</button>' +
+      '<span class="detail-star-wrap">' + starBtnHtml(w.id) + '</span>' + secs.join('');
     $('#detail-speak').addEventListener('click', function () { speak(w.kana, w.id); });
+    bindAllStarBtns(sheet);
     $('#detail-close').addEventListener('click', close);
   }).catch(function (err) {
     ov.querySelector('.detail-sheet').innerHTML =
@@ -1936,6 +2065,17 @@ function renderMe() {
       '</ul>' +
     '</div>' +
 
+    '<a href="#/starred" class="glass" style="display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;text-decoration:none;color:inherit">' +
+      '<span style="font-size:22px">★</span>' +
+      '<span style="flex:1"><b>生词本</b><br><span class="muted" style="font-size:12px">收藏的难词，集中复习</span></span>' +
+      '<span class="chev">›</span>' +
+    '</a>' +
+
+    '<div class="glass setting-card" id="stats-card">' +
+      '<h3>学习统计</h3>' +
+      '<div id="stats-body">' + loadingHtml('正在统计…') + '</div>' +
+    '</div>' +
+
     '<div class="glass setting-card">' +
       '<h3>学习语言</h3>' +
       '<div class="seg" id="lang-seg">' +
@@ -2089,6 +2229,7 @@ function renderMe() {
     });
   });
   initVoiceSettings();
+  renderStatsCard();
   // 手动检查更新：强制刷新 SW，发现新版走热更新流程
   var cbu = $('#btn-check-update');
   if (cbu) cbu.addEventListener('click', function () {
@@ -2125,6 +2266,108 @@ function renderMe() {
   });
 }
 routes['me'] = renderMe;
+
+/* ================= v0.8 学习统计图表（Canvas 手绘） ================= */
+function renderStatsCard() {
+  var body = $('#stats-body');
+  if (!body) return;
+  api('/stats/summary').then(function (s) {
+    var daily = s.daily || [];
+    var hasData = daily.some(function (d) { return d.new > 0 || d.review > 0; });
+    if (!hasData) {
+      body.innerHTML = '<div style="text-align:center;padding:18px 0;color:var(--ink-soft)">' +
+        '<div style="font-size:32px;margin-bottom:8px">📊</div>' +
+        '<p>开始学习后，这里会有你的<br>14 天趋势、保持率与打卡记录。</p></div>';
+      return;
+    }
+    var streak = s.streak || 0;
+    var studied = (s.total && s.total.studied) || 0;
+    var mastered = (s.total && s.total.mastered) || 0;
+    var ret = s.retention || {};
+    var retTxt = ret.rate != null ? Math.round(ret.rate * 100) + '%' : '—';
+    var retSub = ret.total ? ('近 7 天 ' + ret.correct + '/' + ret.total) : '近 7 天暂无复习';
+
+    var h = '<div class="stats-nums">' +
+      '<div class="num"><b class="aka">' + streak + '</b><span>连续学习(天)</span></div>' +
+      '<div class="num"><b>' + studied + '</b><span>累计学词</span></div>' +
+      '<div class="num"><b>' + mastered + '</b><span>已掌握</span></div>' +
+      '</div>' +
+      '<div style="margin:10px 0 4px"><b style="font-size:15px">近 14 天</b> ' +
+        '<span class="muted" style="font-size:12px">新学 / 复习</span></div>' +
+      '<canvas class="stats-canvas" id="cv-daily" width="640" height="260"></canvas>' +
+      '<div class="stats-legend"><span><i style="background:#E03E2D"></i>新学</span>' +
+        '<span><i style="background:#274C77"></i>复习</span></div>' +
+      '<div style="margin:14px 0 4px"><b style="font-size:15px">7 天保持率</b> ' +
+        '<span class="muted" style="font-size:12px">' + esc(retSub) + '</span></div>' +
+      '<div style="font-size:34px;font-weight:700;color:var(--aka)">' + retTxt + '</div>';
+    body.innerHTML = h;
+    drawDailyChart($('#cv-daily'), daily);
+  }).catch(function () {
+    body.innerHTML = '<p class="muted" style="text-align:center">统计暂不可用</p>';
+  });
+}
+
+/* 14 天双色柱状图：上半新学（朱红），下半复习（绀青）堆叠 */
+function drawDailyChart(cv, daily) {
+  if (!cv || !cv.getContext) return;
+  var ctx = cv.getContext('2d');
+  var W = cv.width, H = cv.height;
+  var padL = 8, padR = 8, padT = 12, padB = 28;
+  var cw = W - padL - padR, ch = H - padT - padB;
+  var maxV = 1;
+  daily.forEach(function (d) { maxV = Math.max(maxV, d.new + d.review); });
+  var n = daily.length;
+  var slot = cw / n;
+  var bw = Math.min(22, slot * 0.52);
+  ctx.clearRect(0, 0, W, H);
+  // 基线
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(padL, padT + ch); ctx.lineTo(padL + cw, padT + ch); ctx.stroke();
+  daily.forEach(function (d, i) {
+    var x = padL + slot * i + (slot - bw) / 2;
+    var total = d.new + d.review;
+    var baseY = padT + ch;
+    if (total > 0) {
+      var hNew = ch * d.new / maxV;
+      var hRev = ch * d.review / maxV;
+      // 复习（绀青）在下
+      if (hRev > 0) {
+        ctx.fillStyle = '#274C77';
+        roundRect(ctx, x, baseY - hRev, bw, hRev, 3);
+        ctx.fill();
+      }
+      // 新学（朱红）在上
+      if (hNew > 0) {
+        ctx.fillStyle = '#E03E2D';
+        roundRect(ctx, x, baseY - hRev - hNew, bw, hNew, 3);
+        ctx.fill();
+      }
+      // 数值
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(total), x + bw / 2, baseY - hRev - hNew - 6);
+    }
+    // 日期（MM-DD，每 2 天一个）
+    if (i % 2 === 0 || n <= 7) {
+      ctx.fillStyle = 'rgba(0,0,0,0.38)';
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(d.date.slice(5), padL + slot * i + slot / 2, H - 8);
+    }
+  });
+}
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
 
 /* ================= 启动 ================= */
 injectSvgDefs();
