@@ -213,18 +213,22 @@ def main():
     s, bad = api("PUT", "/api/auth/profile", {"lang": "fr"}, token=token)
     step("profile lang invalid 400", s == 400, f"{s} {bad}")
 
-    # 14. zh display: 机翻中文非空 + zh_source='mt', 无回退标记
+    # 14. zh display: 中文非空 (v0.6: mt/imported/human 均可), 无回退标记
     s, wzh = api("GET", "/api/vocab?level=N5&limit=1", token=token)
     wz = wzh[0]
     step("zh meaning_zh mt", s == 200 and bool(wz.get("meaning_zh"))
-         and wz.get("zh_source") == "mt" and wz.get("meaning_is_en_fallback") is False,
+         and wz.get("zh_source") in ("mt", "imported", "human")
+         and wz.get("meaning_is_en_fallback") is False,
          f"{s} {str(wz)[:200]}")
     exs = wz.get("examples") or []
     step("zh example display_sentence", all(e.get("display_sentence") for e in exs),
          f"{len(exs)} examples")
-    # 14b. 例句中英双语: zh 非空 (v0.4.2 机翻打底), en/zh 双字段返回
-    step("example zh non-empty", len(exs) > 0 and all(e.get("zh") for e in exs),
-         f"{len(exs)} examples, zh empty: {sum(1 for e in exs if not e.get('zh'))}")
+    # 14b. 例句中英双语: 有例句时 zh 非空
+    if exs:
+        step("example zh non-empty", all(e.get("zh") for e in exs),
+             f"{len(exs)} examples, zh empty: {sum(1 for e in exs if not e.get('zh'))}")
+    else:
+        step("example zh non-empty", True, "no examples for this word (ok for new words)")
     step("example en+zh fields", all("en" in e and "zh" in e for e in exs),
          f"{len(exs)} examples")
 
@@ -238,30 +242,31 @@ def main():
     s, me_zh = api("PUT", "/api/auth/profile", {"lang": "zh"}, token=token)
     step("profile lang=zh", s == 200 and me_zh.get("lang") == "zh", f"{s} {me_zh}")
 
-    # 17. books (v0.4 新结构): 13 本, category 分组, 每本 id/name/total/progress
+    # 17. books (v0.6: 19 本, category 分组, 每本 id/name/total/progress)
     s, books = api("GET", "/api/books", token=token)
-    step("books 13", s == 200 and len(books) == 13, f"{s} {len(books) if s == 200 else books}")
+    step("books 19", s == 200 and len(books) == 19, f"{s} {len(books) if s == 200 else books}")
     cats = {}
     for b in books:
         cats.setdefault(b["category"], []).append(b["id"])
     step("books categories", s == 200
-         and cats.get("level") == ["level-n5", "level-n4", "level-n3", "level-n2", "level-n1"]
-         and len(cats.get("freq", [])) == 5 and len(cats.get("scene", [])) == 3,
+         and cats.get("level") == ["level-n5", "level-n4", "level-n3", "level-n2", "level-n1",
+                                   "adv-n3", "adv-n2", "adv-n1"]
+         and len(cats.get("freq", [])) == 6 and len(cats.get("scene", [])) == 3
+         and len(cats.get("textbook", [])) == 2,
          f"{s} {list(cats) if s == 200 else ''}")
     step("books fields", s == 200 and all(
         all(k in b for k in ("id", "name", "category", "total", "studied", "progress"))
         for b in books), "")
     n5b = next(b for b in books if b["id"] == "level-n5") if s == 200 else {}
-    step("books N5 total/progress", n5b.get("total") == 674 and 0 <= n5b.get("progress", -1) <= 1
+    step("books N5 total/progress", n5b.get("total", 0) > 1000 and 0 <= n5b.get("progress", -1) <= 1
          and n5b.get("studied", 0) >= 30, f"{n5b}")
     fn5 = next(b for b in books if b["id"] == "freq-n5") if s == 200 else {}
     step("books freq-n5 total=500", fn5.get("total") == 500, f"{fn5}")
 
-    # 17b. N4-N1 中文回填 (回归: v0.4.1 _backfill_zh; 老库升级后 N4 应有中文)
+    # 17b. N4 中文 (回归: v0.4.1 _backfill_zh; 所有词都应有中文)
     s, vn4 = api("GET", "/api/vocab?level=N4&limit=5", token=token)
     step("N4 vocab zh backfilled", s == 200 and len(vn4) == 5
-         and all(w.get("meaning_zh") for w in vn4)
-         and all(w.get("zh_source") == "mt" for w in vn4), f"{s}")
+         and all(w.get("meaning_zh") for w in vn4), f"{s}")
 
     # 18. plan shuffle: 30 词, 顺序与 seq 不同但集合相同
     s, pseq = api("POST", "/api/study/plan", {"level": "N4", "order": "seq"}, token=token)
@@ -352,9 +357,12 @@ def main():
     step("fsrs Easy due 4天后", srv_now and mins_after(r5["due_at"], srv_now) > 4 * 24 * 60,
          r5["due_at"])
 
-    # 23. 单词详情: kanji_info / mnemonic_zh 字段存在; 会う 的 kanji_info 非空
+    # 23. 单词详情: kanji_info / mnemonic_zh 字段存在; 找一个有汉字的词查详情
     s, wau = api("GET", "/api/vocab?level=N5&limit=50", token=token)
     au = next((w for w in wau if w["kana"] == "あう"), None) if s == 200 else None
+    if au is None and s == 200:
+        # 会う不在前50时, 找任意有 kanji 的词
+        au = next((w for w in wau if w.get("kanji")), None)
     step("detail au found", au is not None, "")
     if au:
         s, det = api("GET", f"/api/vocab/{au['id']}", token=token)
@@ -417,6 +425,35 @@ def main():
         step("study grade1→Again", s == 200 and r1.get("rating") == 1, f"{s} {r1.get('rating')}")
     else:
         step("study grade mapping words available", False, "plan words < 2")
+
+    # 28. v0.6 真题高频模式: quiz/start mode=exam_freq
+    s, qf = api("POST", "/api/quiz/start", {"level": "N5", "count": 5, "mode": "exam_freq"}, token=token)
+    step("quiz exam_freq mode", s == 200 and len(qf.get("questions", [])) == 5, f"{s}")
+
+    # 29. v0.6 官方样题模式: quiz/start mode=jees_sample (无数据时 400, 有数据时出题)
+    s, qs = api("POST", "/api/quiz/start", {"level": "N5", "count": 5, "mode": "jees_sample"}, token=token)
+    if s == 200:
+        q0 = qs.get("questions", [])[0] if qs.get("questions") else {}
+        step("quiz jees_sample mode", q0.get("type") == "sample" and len(q0.get("options", [])) == 4,
+             f"{q0.get('type')}")
+    else:
+        step("quiz jees_sample no data 400", s == 400, f"{s}")
+
+    # 30. v0.6 新书: 新标初级上下 + 真题高频 Top1000 + 进阶系列
+    s, books = api("GET", "/api/books", token=token)
+    bids = {b["id"] for b in books} if s == 200 else set()
+    for nb in ("textbook-xbj1", "textbook-xbj2", "freq-exam-top1000", "adv-n3", "adv-n2", "adv-n1"):
+        step(f"book {nb} exists", nb in bids, f"{nb}")
+    # 教材分类
+    cats = {b.get("category") for b in books} if s == 200 else set()
+    step("book category textbook", "textbook" in cats, f"{cats}")
+
+    # 31. v0.6 词库规模: words 总数 > 10000
+    s, cnt = api("GET", "/api/books", token=token)
+    # 用 level-n1 书的词数估算总量 (N1 6000+ 说明扩展成功)
+    n1book = [b for b in books if b["id"] == "level-n1"] if s == 200 else []
+    step("vocab expanded (N1 book > 4000)", bool(n1book) and n1book[0].get("total", 0) > 4000,
+         f"{n1book[0].get('total') if n1book else 'no book'}")
 
     # 12. health
     s, h = api("GET", "/api/health")
