@@ -455,6 +455,35 @@ def main():
     step("vocab expanded (N1 book > 4000)", bool(n1book) and n1book[0].get("total", 0) > 4000,
          f"{n1book[0].get('total') if n1book else 'no book'}")
 
+    # 11b. v0.7 音频接口: 404 / 200 / 路径穿越
+    import os as _os
+    _audio_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                              "backend", "data", "audio")
+    _os.makedirs(_audio_dir, exist_ok=True)
+    _fake = _os.path.join(_audio_dir, "smoke_fake_audio.mp3")
+    with open(_fake, "wb") as _f:
+        _f.write(b"ID3\x04\x00\x00\x00\x00\x00\x00" + b"\xff\xfb\x90\x00" * 100)
+    try:
+        s, _ = api("GET", "/api/audio/does-not-exist-xyz.mp3", token=token)
+        step("audio 404 (missing)", s == 404, f"{s}")
+        s, _ = api("GET", "/api/audio/../secret.mp3", token=token)
+        step("audio 404 (path traversal)", s in (404, 422), f"{s}")
+        # 200 情况：直接 urllib 取原始字节验 content-type
+        _req = urllib.request.Request(BASE + "/api/audio/smoke_fake_audio.mp3")
+        try:
+            with urllib.request.urlopen(_req, timeout=30) as _resp:
+                _ct = _resp.headers.get("Content-Type", "")
+                _body = _resp.read()
+                step("audio 200 (fake mp3)", _resp.status == 200 and "audio/mpeg" in _ct and len(_body) > 0,
+                     f"{_resp.status} {_ct}")
+        except urllib.error.HTTPError as _e:
+            step("audio 200 (fake mp3)", False, f"HTTP {_e.code}")
+    finally:
+        try:
+            _os.remove(_fake)
+        except OSError:
+            pass
+
     # 12. health
     s, h = api("GET", "/api/health")
     step("health", s == 200 and h.get("ok") is True, f"{s} {h}")
