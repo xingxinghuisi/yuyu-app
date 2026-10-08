@@ -664,6 +664,7 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 
 /* 得分环 */
 .score-wrap { text-align: center; padding: 28px 20px; margin-bottom: 16px; }
+.score-meta { display: flex; justify-content: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--ink-soft); }
 .score-num { font-size: 56px; font-weight: 800; color: var(--vermilion); }
 .score-num small { font-size: 20px; color: var(--ink-soft); font-weight: 400; }
 .wrong-list { display: grid; gap: 10px; }
@@ -829,82 +830,79 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 /* ---------- 书架：竖排玻璃书脊卡片 ---------- */
 .shelf {
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
-  margin-top: 20px;
-}
-.book {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 248px;
-  border-radius: 18px;
-  padding: 18px 6px 12px;
-  display: flex;
   flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+/* 横式书卡：一行一本，书名/描述/词数/进度完整展示 */
+.book {
+  display: flex;
   align-items: center;
+  gap: 12px;
+  width: 100%;
+  border-radius: 18px;
+  padding: 14px 16px 14px 20px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
+  text-align: left;
   font-family: var(--font-cn);
   color: var(--ink);
   transition: transform .25s var(--spring), border-color .2s;
 }
-/* 书脊参差，像真正的书架 */
-.book:nth-child(2) { height: 236px; }
-.book:nth-child(3) { height: 244px; }
-.book:nth-child(4) { height: 232px; }
-.book:nth-child(5) { height: 240px; }
+/* 左侧朱红书签条，保留一点书卷气 */
 .book::before {
   content: '';
   position: absolute; left: 0; top: 0; bottom: 0;
-  width: 7px;
+  width: 5px;
   background: linear-gradient(180deg, var(--vermilion), var(--vermilion-deep));
   opacity: .9;
 }
-.book::after {
-  content: '';
-  position: absolute; top: 0; bottom: 0; left: 7px;
-  width: 1px;
-  background: rgba(255, 255, 255, .25);
-}
-.book:active { transform: scale(.94); }
+.book:active { transform: scale(.97); }
 .book.current { border-color: color-mix(in srgb, var(--vermilion) 60%, transparent); }
+.book-main { flex: 1 1 auto; min-width: 0; }
 .book-lv {
   font-size: 16px;
   font-weight: 800;
-  letter-spacing: 1px;
-  margin-top: 6px;
-  text-align: center;
-  line-height: 1.35;
+  letter-spacing: .5px;
+  line-height: 1.4;
 }
 .book-desc {
-  font-size: 11px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
   color: var(--ink-soft);
-  margin-top: 6px;
-  text-align: center;
-  line-height: 1.45;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.book-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 .book-count {
-  margin-top: auto;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.vbar {
-  width: 8px;
-  height: 52px;
+.book-bar {
+  width: 96px;
+  height: 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 10%, transparent);
-  margin: 8px 0 6px;
-  position: relative;
   overflow: hidden;
 }
-.vbar i {
-  position: absolute; bottom: 0; left: 0; right: 0;
+.book-bar i {
+  display: block;
+  height: 100%;
   border-radius: 999px;
-  background: linear-gradient(180deg, var(--vermilion), var(--vermilion-deep));
-  transition: height .8s var(--spring);
+  background: linear-gradient(90deg, var(--vermilion), var(--vermilion-deep));
+  transition: width .8s var(--spring);
 }
 .book-pct {
   font-size: 12px;
@@ -1018,7 +1016,8 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 .peer-btns .btn { padding: 14px 6px; font-size: 15px; }
 
 /* ---------- 随堂小测 ---------- */
-.mini-quiz-head { margin-bottom: 14px; }
+.mini-quiz-head { margin-bottom: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mini-quiz-head .quiz-progress { flex: 1 1 100%; }
 .mini-quiz-tag {
   display: inline-block;
   font-size: 12px;
@@ -1120,7 +1119,7 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 .hub-island { font-size: 13px; color: var(--indigo); text-decoration: none; white-space: nowrap; }
 .btn-sm { padding: 8px 18px; font-size: 14px; }
 /* v0.4.3 学习展示流 + 退回 */
-.study-nav { display: flex; justify-content: flex-start; margin: 8px 0 4px; min-height: 34px; }
+.study-nav { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 4px; min-height: 34px; }
 .study-grade-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .study-graded { text-align: center; font-size: 14px; color: var(--ink-soft); margin-bottom: 12px; }
 .study-graded b { color: var(--ink); }
