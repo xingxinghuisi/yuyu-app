@@ -1,6 +1,7 @@
-# 本地运行数据与密钥（勿提交）
+# 本地运行数据与密钥（勿提交）: 仅忽略仓库根目录的 data/（线上 /data 挂载卷）
+# backend/data/seed/ 下的种子库需要进仓库, 否则 git pull 部署时新词书/中文回填无法生效
+/data/
 .env
-data/
 
 # Python
 __pycache__/

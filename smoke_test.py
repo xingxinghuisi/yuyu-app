@@ -230,13 +230,30 @@ def main():
     s, me_zh = api("PUT", "/api/auth/profile", {"lang": "zh"}, token=token)
     step("profile lang=zh", s == 200 and me_zh.get("lang") == "zh", f"{s} {me_zh}")
 
-    # 17. books: 5 级, N5 total=674
+    # 17. books (v0.4 新结构): 13 本, category 分组, 每本 id/name/total/progress
     s, books = api("GET", "/api/books", token=token)
-    step("books 5 levels", s == 200 and [b["level"] for b in books] == ["N5", "N4", "N3", "N2", "N1"],
-         f"{s}")
-    n5b = books[0]
-    step("books N5 total/progress", n5b["total"] == 674 and 0 <= n5b["progress"] <= 1
-         and n5b["studied"] >= 30, f"{n5b}")
+    step("books 13", s == 200 and len(books) == 13, f"{s} {len(books) if s == 200 else books}")
+    cats = {}
+    for b in books:
+        cats.setdefault(b["category"], []).append(b["id"])
+    step("books categories", s == 200
+         and cats.get("level") == ["level-n5", "level-n4", "level-n3", "level-n2", "level-n1"]
+         and len(cats.get("freq", [])) == 5 and len(cats.get("scene", [])) == 3,
+         f"{s} {list(cats) if s == 200 else ''}")
+    step("books fields", s == 200 and all(
+        all(k in b for k in ("id", "name", "category", "total", "studied", "progress"))
+        for b in books), "")
+    n5b = next(b for b in books if b["id"] == "level-n5") if s == 200 else {}
+    step("books N5 total/progress", n5b.get("total") == 674 and 0 <= n5b.get("progress", -1) <= 1
+         and n5b.get("studied", 0) >= 30, f"{n5b}")
+    fn5 = next(b for b in books if b["id"] == "freq-n5") if s == 200 else {}
+    step("books freq-n5 total=500", fn5.get("total") == 500, f"{fn5}")
+
+    # 17b. N4-N1 中文回填 (回归: v0.4.1 _backfill_zh; 老库升级后 N4 应有中文)
+    s, vn4 = api("GET", "/api/vocab?level=N4&limit=5", token=token)
+    step("N4 vocab zh backfilled", s == 200 and len(vn4) == 5
+         and all(w.get("meaning_zh") for w in vn4)
+         and all(w.get("zh_source") == "mt" for w in vn4), f"{s}")
 
     # 18. plan shuffle: 30 词, 顺序与 seq 不同但集合相同
     s, pseq = api("POST", "/api/study/plan", {"level": "N4", "order": "seq"}, token=token)
@@ -341,6 +358,30 @@ def main():
         exs = det.get("examples") if s == 200 else []
         step("detail examples have ja", s == 200 and len(exs) > 0
              and all(e.get("ja") for e in exs), f"{len(exs) if isinstance(exs, list) else '?'}")
+
+    # ==== v0.4 ====
+
+    # 24. study/plan book_id: 高频书/场景书出词; 非法 book_id 400
+    s, pb = api("POST", "/api/study/plan", {"book_id": "freq-n5", "order": "seq"}, token=token)
+    step("plan book_id freq-n5", s == 200 and len(pb.get("words", [])) > 0
+         and all(w["level"] == "N5" for w in pb["words"]), f"{s}")
+    s, ps = api("POST", "/api/study/plan", {"book_id": "scene-travel"}, token=token)
+    step("plan book_id scene-travel", s == 200 and len(ps.get("words", [])) > 0, f"{s}")
+    s, pbad = api("POST", "/api/study/plan", {"book_id": "no-such-book"}, token=token)
+    step("plan invalid book_id 400", s == 400, f"{s} {pbad}")
+    # book_id + shuffle 仍可用
+    s, pbsh = api("POST", "/api/study/plan", {"book_id": "freq-n4", "order": "shuffle"}, token=token)
+    step("plan book_id shuffle", s == 200 and len(pbsh.get("words", [])) > 0, f"{s}")
+
+    # 25. island: 形状与等级规则
+    s, isl = api("GET", "/api/island", token=token)
+    step("island shape", s == 200 and isl.get("level") in (1, 2, 3, 4, 5)
+         and isinstance(isl.get("level_name"), str) and isinstance(isl.get("streak"), int)
+         and isinstance(isl.get("total_words"), int) and 0 <= isl.get("progress", -1) <= 1,
+         f"{s} {isl}")
+    # 该用户学了 30+ 词且打卡 1 天: total_words>=31, streak>=1
+    step("island values", s == 200 and isl.get("total_words", 0) >= 31
+         and isl.get("streak", 0) >= 1, f"{isl if s == 200 else ''}")
 
     # 12. health
     s, h = api("GET", "/api/health")

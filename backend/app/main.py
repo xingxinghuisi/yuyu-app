@@ -224,6 +224,7 @@ class ProfileIn(BaseModel):
 class StudyPlanIn(BaseModel):
     level: str = "N5"
     order: str = "seq"
+    book_id: str | None = None  # v0.4: 指定词书; 为空则按 level 回退
 
 
 class AnswerIn(BaseModel):
@@ -395,22 +396,44 @@ def get_vocab(
 
 @app.get("/api/books")
 def get_books(user: dict = Depends(current_user)):
+    """v0.4: 返回词书列表 (按 category 分组由前端做)。
+    每本: id/name/category/level/description/total/studied/progress。"""
     conn = get_db()
     try:
         books = []
-        for level in LEVELS:
+        for b in conn.execute("SELECT * FROM books ORDER BY sort_order").fetchall():
+            b = dict(b)
             total = conn.execute(
-                "SELECT COUNT(*) AS c FROM words WHERE level=?", (level,)
+                "SELECT COUNT(*) AS c FROM book_words WHERE book_id=?", (b["id"],)
             ).fetchone()["c"]
             studied = conn.execute(
                 """SELECT COUNT(DISTINCT uw.word_id) AS c FROM user_words uw
-                   JOIN words w ON w.id = uw.word_id
-                   WHERE uw.user_id=? AND w.level=?""",
-                (user["id"], level),
+                   JOIN book_words bw ON bw.word_id = uw.word_id
+                   WHERE uw.user_id=? AND bw.book_id=?""",
+                (user["id"], b["id"]),
             ).fetchone()["c"]
-            progress = round(studied / total, 2) if total else 0.0
-            books.append({"level": level, "total": total,
-                          "studied": studied, "progress": progress})
+            books.append({
+                "id": b["id"], "name": b["name"], "category": b["category"],
+                "level": b["level"], "description": b["description"],
+                "total": total, "studied": studied,
+                "progress": round(studied / total, 2) if total else 0.0,
+            })
+        # 兜底: books 表为空 (极旧库) 则按 level 生成
+        if not books:
+            for level in LEVELS:
+                total = conn.execute(
+                    "SELECT COUNT(*) AS c FROM words WHERE level=?", (level,)
+                ).fetchone()["c"]
+                studied = conn.execute(
+                    """SELECT COUNT(DISTINCT uw.word_id) AS c FROM user_words uw
+                       JOIN words w ON w.id = uw.word_id
+                       WHERE uw.user_id=? AND w.level=?""",
+                    (user["id"], level),
+                ).fetchone()["c"]
+                books.append({"id": f"level-{level.lower()}", "name": level,
+                              "category": "level", "level": level, "description": "",
+                              "total": total, "studied": studied,
+                              "progress": round(studied / total, 2) if total else 0.0})
         return books
     finally:
         conn.close()
@@ -426,16 +449,30 @@ def study_plan(body: StudyPlanIn | None = None, user: dict = Depends(current_use
     order = (body.order if body else None) or "seq"
     if order not in ("seq", "shuffle"):
         raise HTTPException(status_code=400, detail="invalid order: must be 'seq' or 'shuffle'")
+    book_id = (body.book_id if body else None) or None
     lang = user.get("lang") or "zh"
-    ordering = "ORDER BY kana" if order == "seq" else "ORDER BY RANDOM()"
+    ordering = "ORDER BY bw.sort_order" if order == "seq" else "ORDER BY RANDOM()"
     conn = get_db()
     try:
-        rows = conn.execute(
-            f"""SELECT * FROM words WHERE level=?
-               AND id NOT IN (SELECT word_id FROM user_words WHERE user_id=?)
-               {ordering} LIMIT 30""",
-            (level, user["id"]),
-        ).fetchall()
+        if book_id:
+            brow = conn.execute("SELECT id FROM books WHERE id=?", (book_id,)).fetchone()
+            if brow is None:
+                raise HTTPException(status_code=400, detail="invalid book_id")
+            rows = conn.execute(
+                f"""SELECT w.* FROM words w
+                   JOIN book_words bw ON bw.word_id = w.id
+                   WHERE bw.book_id=? AND w.id NOT IN (SELECT word_id FROM user_words WHERE user_id=?)
+                   {ordering} LIMIT 30""",
+                (book_id, user["id"]),
+            ).fetchall()
+        else:
+            ordering_legacy = "ORDER BY kana" if order == "seq" else "ORDER BY RANDOM()"
+            rows = conn.execute(
+                f"""SELECT * FROM words WHERE level=?
+                   AND id NOT IN (SELECT word_id FROM user_words WHERE user_id=?)
+                   {ordering_legacy} LIMIT 30""",
+                (level, user["id"]),
+            ).fetchall()
         words = [word_to_dict(r, conn, lang) for r in rows]
         today_learned = conn.execute(
             "SELECT COUNT(DISTINCT word_id) AS c FROM study_logs"
@@ -710,6 +747,54 @@ def home_summary(user: dict = Depends(current_user)):
             "review_due": review_due,
             "streak": compute_streak(conn, user["id"]),
             "checked_in_today": checked_in_today,
+        }
+    finally:
+        conn.close()
+
+
+# ---------------- 岛屿养成 ----------------
+
+ISLAND_LEVELS = [
+    {"level": 1, "name": "沙洲", "streak": 0, "words": 0},
+    {"level": 2, "name": "小岛", "streak": 3, "words": 50},
+    {"level": 3, "name": "绿岛", "streak": 7, "words": 150},
+    {"level": 4, "name": "樱花岛", "streak": 14, "words": 300},
+    {"level": 5, "name": "日语之岛", "streak": 30, "words": 600},
+]
+
+
+@app.get("/api/island")
+def island(user: dict = Depends(current_user)):
+    """岛屿养成: 等级由连续打卡天数 / 累计学词数双维度决定 (任一达标即升级)。"""
+    conn = get_db()
+    try:
+        streak = compute_streak(conn, user["id"])
+        total_words = conn.execute(
+            "SELECT COUNT(DISTINCT word_id) AS c FROM user_words WHERE user_id=?",
+            (user["id"],),
+        ).fetchone()["c"]
+        level = 1
+        for lv in ISLAND_LEVELS:
+            if streak >= lv["streak"] or total_words >= lv["words"]:
+                level = lv["level"]
+        cur = ISLAND_LEVELS[level - 1]
+        if level >= len(ISLAND_LEVELS):
+            nxt, progress, is_max = None, 1.0, True
+        else:
+            nxt = ISLAND_LEVELS[level]
+            progress = max(
+                min(streak / nxt["streak"], 1.0) if nxt["streak"] else 0.0,
+                min(total_words / nxt["words"], 1.0) if nxt["words"] else 0.0,
+            )
+            is_max = False
+        return {
+            "level": level, "level_name": cur["name"],
+            "streak": streak, "total_words": total_words,
+            "is_max": is_max, "progress": round(progress, 2),
+            "next_level": nxt["level"] if nxt else None,
+            "next_level_name": nxt["name"] if nxt else None,
+            "next_streak": nxt["streak"] if nxt else None,
+            "next_words": nxt["words"] if nxt else None,
         }
     finally:
         conn.close()
