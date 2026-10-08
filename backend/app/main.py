@@ -92,6 +92,7 @@ def me_dict(row: dict) -> dict:
         "phone": row["phone"],
         "pro": row["pro"],
         "lang": row.get("lang") or "zh",
+        "daily_goal": row.get("daily_goal") or 30,
         "created_at": row["created_at"],
     }
 
@@ -219,6 +220,7 @@ class ProfileIn(BaseModel):
     email: str | None = None
     phone: str | None = None
     lang: str | None = None
+    daily_goal: int | None = None
 
 
 class StudyPlanIn(BaseModel):
@@ -322,6 +324,14 @@ def update_profile(body: ProfileIn, user: dict = Depends(current_user)):
         if lang not in LANGS:
             raise HTTPException(status_code=400, detail="invalid lang: must be 'zh' or 'en'")
         updates["lang"] = lang
+    if body.daily_goal is not None:
+        try:
+            dg = int(body.daily_goal)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="invalid daily_goal")
+        if dg < 1 or dg > 200:
+            raise HTTPException(status_code=400, detail="invalid daily_goal: must be 1-200")
+        updates["daily_goal"] = dg
     conn = get_db()
     try:
         if updates:
@@ -479,7 +489,7 @@ def study_plan(body: StudyPlanIn | None = None, user: dict = Depends(current_use
             " WHERE user_id=? AND substr(created_at,1,10)=?",
             (user["id"], today_str()),
         ).fetchone()["c"]
-        return {"words": words, "daily_goal": 30, "today_learned": today_learned}
+        return {"words": words, "daily_goal": user.get("daily_goal") or 30, "today_learned": today_learned}
     finally:
         conn.close()
 
@@ -743,7 +753,7 @@ def home_summary(user: dict = Depends(current_user)):
         )
         return {
             "today_learned": today_learned,
-            "daily_goal": 30,
+            "daily_goal": user.get("daily_goal") or 30,
             "review_due": review_due,
             "streak": compute_streak(conn, user["id"]),
             "checked_in_today": checked_in_today,

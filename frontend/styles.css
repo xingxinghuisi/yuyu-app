@@ -1119,3 +1119,13 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 .hub-checked { font-size: 13px; color: var(--ink-soft); }
 .hub-island { font-size: 13px; color: var(--indigo); text-decoration: none; white-space: nowrap; }
 .btn-sm { padding: 8px 18px; font-size: 14px; }
+/* v0.4.3 学习展示流 + 退回 */
+.study-nav { display: flex; justify-content: flex-start; margin: 8px 0 4px; min-height: 34px; }
+.study-grade-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.study-graded { text-align: center; font-size: 14px; color: var(--ink-soft); margin-bottom: 12px; }
+.study-graded b { color: var(--ink); }
+/* 每日目标步进器 */
+.goal-stepper { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+.goal-stepper .btn { min-width: 44px; }
+.goal-val { font-size: 16px; }
+.goal-val b { font-size: 26px; }

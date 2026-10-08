@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone         TEXT,
   pro           INTEGER DEFAULT 0,
   lang          TEXT DEFAULT 'zh',
+  daily_goal    INTEGER DEFAULT 30,
   created_at    TEXT NOT NULL
 );
 
@@ -70,7 +71,7 @@ _WORDS_COLS = ("id", "kanji", "kana", "romaji", "meaning_en", "meaning_zh", "pos
                "mnemonic_zh", "image_url", "source", "created_at", "updated_at",
                "zh_source")
 _EXAMPLES_COLS = ("id", "word_id", "sentence_ja", "furigana", "sentence_en",
-                  "sentence_zh", "tatoeba_id", "source")
+                  "sentence_zh", "zh_source", "tatoeba_id", "source")
 _KANJI_COLS = ("character", "level", "strokes", "onyomi", "kunyomi", "meanings",
                "meaning_zh", "created_at", "updated_at")
 
@@ -97,7 +98,7 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
                 audio_url TEXT, mnemonic_zh TEXT, image_url TEXT,
                 source TEXT NOT NULL DEFAULT 'openjlpt',
                 created_at TEXT NOT NULL, updated_at TEXT NOT NULL, zh_source TEXT)""")
-            cols = ", ".join(_WORDS_COLS)
+            cols = _import_cols(_WORDS_COLS, _seed_col_names(conn, "words"))
             conn.execute(f"INSERT INTO words ({cols}) SELECT {cols} FROM seed.words")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_words_level ON words(level)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_words_kana ON words(kana)")
@@ -106,10 +107,10 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 word_id TEXT NOT NULL REFERENCES words(id) ON DELETE CASCADE,
                 sentence_ja TEXT NOT NULL, furigana TEXT, sentence_en TEXT,
-                sentence_zh TEXT, tatoeba_id INTEGER,
+                sentence_zh TEXT, zh_source TEXT, tatoeba_id INTEGER,
                 source TEXT NOT NULL DEFAULT 'tatoeba',
                 UNIQUE(word_id, tatoeba_id))""")
-            cols = ", ".join(_EXAMPLES_COLS)
+            cols = _import_cols(_EXAMPLES_COLS, _seed_col_names(conn, "examples"))
             conn.execute(f"INSERT INTO examples ({cols}) SELECT {cols} FROM seed.examples")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_examples_word ON examples(word_id)")
         if "kanji" in needed:
@@ -117,7 +118,7 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
                 character TEXT PRIMARY KEY, level TEXT, strokes INTEGER,
                 onyomi TEXT, kunyomi TEXT, meanings TEXT, meaning_zh TEXT,
                 created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
-            cols = ", ".join(_KANJI_COLS)
+            cols = _import_cols(_KANJI_COLS, _seed_col_names(conn, "kanji"))
             conn.execute(f"INSERT INTO kanji ({cols}) SELECT {cols} FROM seed.kanji")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_kanji_level ON kanji(level)")
         conn.commit()
@@ -126,6 +127,17 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
         raise
     finally:
         conn.execute("DETACH seed")
+
+
+def _seed_col_names(conn: sqlite3.Connection, table: str) -> list:
+    """种子库某表的实际列名（兼容新老种子库的列差异）"""
+    return [r[1] for r in conn.execute(f"PRAGMA seed.table_info({table})")]
+
+
+def _import_cols(table_cols: tuple, seed_cols: list) -> str:
+    """取目标列与种子库实际列的交集（保持目标表列顺序），避免老种子缺列报错"""
+    s = set(seed_cols)
+    return ", ".join(c for c in table_cols if c in s)
 
 
 _BOOKS_COLS = ("id", "name", "category", "level", "description", "sort_order")
@@ -162,7 +174,7 @@ def _import_books(conn: sqlite3.Connection) -> None:
         # books 为空 (旧种子场景) 时也要从新种子补上
         if conn.execute("SELECT COUNT(*) FROM books").fetchone()[0] == 0:
             if "books" in seed_tables:
-                cols = ", ".join(_BOOKS_COLS)
+                cols = _import_cols(_BOOKS_COLS, _seed_col_names(conn, "books"))
                 conn.execute(f"INSERT INTO books ({cols}) SELECT {cols} FROM seed.books")
         # book_words 全量重建 (幂等: 清空后重插, 词书内容以种子库为准)
         conn.execute("""CREATE TABLE IF NOT EXISTS book_words (
@@ -170,7 +182,7 @@ def _import_books(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (book_id, word_id))""")
         conn.execute("DELETE FROM book_words")
         if "book_words" in seed_tables:
-            cols = ", ".join(_BOOK_WORDS_COLS)
+            cols = _import_cols(_BOOK_WORDS_COLS, _seed_col_names(conn, "book_words"))
             conn.execute(f"INSERT INTO book_words ({cols}) SELECT {cols} FROM seed.book_words")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_book_words ON book_words(book_id, sort_order)")
         conn.commit()
@@ -207,6 +219,49 @@ def _backfill_zh(conn: sqlite3.Connection) -> None:
             WHERE (meaning_zh IS NULL OR meaning_zh = '')
               AND EXISTS (SELECT 1 FROM seed.words s
                           WHERE s.id = words.id AND s.meaning_zh IS NOT NULL AND s.meaning_zh != '')
+        """)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("DETACH seed")
+
+
+def _backfill_example_zh(conn: sqlite3.Connection) -> None:
+    """v0.4.2: 用种子库的 sentence_zh 补齐已有 examples 行的例句中文 (幂等)。
+
+    只填 sentence_zh 为空的行, 已有中文 (含人工校对) 永不覆盖。
+    老库的 examples 表若无 zh_source 列则先加上。
+    """
+    seed = find_seed_db()
+    if seed is None:
+        raise FileNotFoundError("seed db not found; cannot backfill example zh")
+    cols = _column_names(conn, "examples")
+    if "sentence_zh" not in cols:
+        return
+    if "zh_source" not in cols:
+        conn.execute("ALTER TABLE examples ADD COLUMN zh_source TEXT")
+        conn.commit()
+    conn.commit()
+    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    try:
+        seed_cols = {r[1] for r in conn.execute("PRAGMA seed.table_info(examples)")}
+        if "sentence_zh" not in seed_cols:
+            return
+        # 老种子库可能没有 zh_source 列：有则同步，无则默认 'mt'
+        if "zh_source" in seed_cols:
+            set_clause = ("sentence_zh = (SELECT s.sentence_zh FROM seed.examples s WHERE s.id = examples.id),"
+                          " zh_source = COALESCE((SELECT s.zh_source FROM seed.examples s WHERE s.id = examples.id), 'mt')")
+        else:
+            set_clause = ("sentence_zh = (SELECT s.sentence_zh FROM seed.examples s WHERE s.id = examples.id),"
+                          " zh_source = 'mt'")
+        conn.execute(f"""
+            UPDATE examples
+            SET {set_clause}
+            WHERE (sentence_zh IS NULL OR sentence_zh = '')
+              AND EXISTS (SELECT 1 FROM seed.examples s
+                          WHERE s.id = examples.id AND s.sentence_zh IS NOT NULL AND s.sentence_zh != '')
         """)
         conn.commit()
     except Exception:
@@ -258,11 +313,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "lang" not in _column_names(conn, "users"):
         conn.execute("ALTER TABLE users ADD COLUMN lang TEXT DEFAULT 'zh'")
     conn.execute("UPDATE users SET lang='zh' WHERE lang IS NULL OR lang=''")
+    if "daily_goal" not in _column_names(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN daily_goal INTEGER DEFAULT 30")
+    conn.execute("UPDATE users SET daily_goal=30 WHERE daily_goal IS NULL OR daily_goal < 1 OR daily_goal > 200")
     if "zh_source" not in _column_names(conn, "words"):
         conn.execute("ALTER TABLE words ADD COLUMN zh_source TEXT")
     _migrate_fsrs_columns(conn)
     _import_books(conn)
     _backfill_zh(conn)
+    _backfill_example_zh(conn)
 
 
 def init_db(data_dir: str | None = None) -> str:

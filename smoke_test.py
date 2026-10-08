@@ -219,6 +219,11 @@ def main():
     exs = wz.get("examples") or []
     step("zh example display_sentence", all(e.get("display_sentence") for e in exs),
          f"{len(exs)} examples")
+    # 14b. 例句中英双语: zh 非空 (v0.4.2 机翻打底), en/zh 双字段返回
+    step("example zh non-empty", len(exs) > 0 and all(e.get("zh") for e in exs),
+         f"{len(exs)} examples, zh empty: {sum(1 for e in exs if not e.get('zh'))}")
+    step("example en+zh fields", all("en" in e and "zh" in e for e in exs),
+         f"{len(exs)} examples")
 
     # 15. en display: 显示英文, 无回退
     s, wen = api("GET", "/api/vocab?level=N5&limit=1&lang=en", token=token)
@@ -382,6 +387,33 @@ def main():
     # 该用户学了 30+ 词且打卡 1 天: total_words>=31, streak>=1
     step("island values", s == 200 and isl.get("total_words", 0) >= 31
          and isl.get("streak", 0) >= 1, f"{isl if s == 200 else ''}")
+
+    # 26. v0.4.3 每日学习目标
+    s, me0 = api("GET", "/api/auth/me", token=token)
+    step("me has daily_goal default 30", s == 200 and me0.get("daily_goal") == 30, f"{s} {me0.get('daily_goal')}")
+    s, _ = api("PUT", "/api/auth/profile", {"daily_goal": 50}, token=token)
+    step("profile set daily_goal 50", s == 200, f"{s}")
+    s, me1 = api("GET", "/api/auth/me", token=token)
+    step("me daily_goal is 50", s == 200 and me1.get("daily_goal") == 50, f"{me1.get('daily_goal')}")
+    s, summ = api("GET", "/api/home/summary", token=token)
+    step("summary daily_goal is 50", s == 200 and summ.get("daily_goal") == 50, f"{summ.get('daily_goal')}")
+    s, pl = api("POST", "/api/study/plan", {"level": "N5", "order": "seq"}, token=token)
+    step("plan daily_goal is 50", s == 200 and pl.get("daily_goal") == 50, f"{pl.get('daily_goal')}")
+    for bad in (0, -5, 201, 1000):
+        s, _ = api("PUT", "/api/auth/profile", {"daily_goal": bad}, token=token)
+        step(f"profile daily_goal {bad} 400", s == 400, f"{s}")
+    s, _ = api("PUT", "/api/auth/profile", {"daily_goal": 30}, token=token)
+    step("profile daily_goal back to 30", s == 200, f"{s}")
+
+    # 27. v0.4.3 新学习流评分映射：认识=4(Good) / 不认识=1(Again)
+    words = pl.get("words", [])
+    if len(words) >= 2:
+        s, r4 = api("POST", "/api/study/answer", {"word_id": words[0]["id"], "grade": 4}, token=token)
+        step("study grade4→Good", s == 200 and r4.get("rating") == 3, f"{s} {r4.get('rating')}")
+        s, r1 = api("POST", "/api/study/answer", {"word_id": words[1]["id"], "grade": 1}, token=token)
+        step("study grade1→Again", s == 200 and r1.get("rating") == 1, f"{s} {r1.get('rating')}")
+    else:
+        step("study grade mapping words available", False, "plan words < 2")
 
     # 12. health
     s, h = api("GET", "/api/health")
