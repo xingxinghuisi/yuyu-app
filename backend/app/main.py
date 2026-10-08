@@ -661,14 +661,15 @@ def quiz_start(body: QuizStartIn, user: dict = Depends(current_user)):
         if options is not None:
             q["options"] = options
         questions.append(q)
-    return questions
+    return {"questions": questions}
 
 
 @app.post("/api/quiz/submit")
 def quiz_submit(body: QuizSubmitIn, user: dict = Depends(current_user)):
     score = 0
-    wrong = []
+    wrong_ids = []
     details = []
+    lang = user.get("lang") or "zh"
     conn = get_db()
     try:
         with _write_lock:
@@ -685,7 +686,7 @@ def quiz_submit(body: QuizSubmitIn, user: dict = Depends(current_user)):
                 if correct:
                     score += 1
                 else:
-                    wrong.append(entry["word_id"])
+                    wrong_ids.append(entry["word_id"])
                     # 错词加入复习队列: 不存在则建默认行, due_at 置为 now
                     conn.execute(
                         """INSERT INTO user_words
@@ -698,6 +699,25 @@ def quiz_submit(body: QuizSubmitIn, user: dict = Depends(current_user)):
             conn.commit()
     finally:
         conn.close()
+    # 错题详情（单词/假名/释义），供成绩单展示
+    wrong = []
+    if wrong_ids:
+        conn2 = get_db()
+        try:
+            placeholders = ",".join("?" for _ in wrong_ids)
+            for r in conn2.execute(
+                f"SELECT * FROM words WHERE id IN ({placeholders})", wrong_ids
+            ).fetchall():
+                w = dict(r)
+                dm, _fb = display_meaning(w, lang)
+                wrong.append({
+                    "word_id": w["id"],
+                    "word": word_display(w),
+                    "kana": w["kana"],
+                    "meaning": dm,
+                })
+        finally:
+            conn2.close()
     return {"score": score, "total": len(body.qid_answers), "wrong": wrong, "details": details}
 
 
