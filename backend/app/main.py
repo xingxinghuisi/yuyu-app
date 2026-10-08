@@ -941,5 +941,19 @@ def _find_frontend_dir() -> Path | None:
 
 
 _frontend_dir = _find_frontend_dir()
+
+# sw.js 必须禁用 HTTP 缓存，否则浏览器数小时内拿不到新 SW，热更新失效
+# （注意：必须在 StaticFiles mount 之前定义，路由按顺序匹配）
+if _frontend_dir is not None:
+    from fastapi.responses import FileResponse
+
+    @app.get("/sw.js", include_in_schema=False)
+    def _sw_no_cache():
+        return FileResponse(
+            str(_frontend_dir / "sw.js"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+
 if _frontend_dir is not None:
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
