@@ -286,7 +286,7 @@ function getVoicePref() {
     };
   } catch (e) { return { voice: '', rate: 0.8 }; }
 }
-function speak(text) {
+function speakTts(text) {
   try {
     if (!('speechSynthesis' in window) || !text) return;
     window.speechSynthesis.cancel();
@@ -302,6 +302,21 @@ function speak(text) {
     }
     window.speechSynthesis.speak(u);
   } catch (e) { /* 忽略 */ }
+}
+/* v0.7: 优先播放 VOICEVOX 真人 MP3，404/失败时回退浏览器 TTS */
+var _audioEl = null;
+function speak(text, wordId) {
+  try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+  if (_audioEl) { try { _audioEl.pause(); } catch (e) {} _audioEl = null; }
+  if (wordId) {
+    var a = new Audio('/api/audio/' + encodeURIComponent(wordId) + '.mp3');
+    _audioEl = a;
+    a.onended = function () { if (_audioEl === a) _audioEl = null; };
+    a.onerror = function () { if (_audioEl === a) { _audioEl = null; speakTts(text); } };
+    try { a.play().catch(function () { speakTts(text); }); } catch (e) { speakTts(text); }
+    return;
+  }
+  speakTts(text);
 }
 /* 初始化发音设置 UI（我的页） */
 function initVoiceSettings() {
@@ -1218,12 +1233,12 @@ function bindWordCard(w, type) {
   var b = $('#btn-speak');
   if (b) b.addEventListener('click', function () {
     b.classList.add('playing');
-    speak(w.kana);
+    speak(w.kana, w.id);
     setTimeout(function () { b.classList.remove('playing'); }, 1200);
   });
   var rp = $('#btn-replay');
-  if (rp) rp.addEventListener('click', function () { speak(w.kana); });
-  if (type === 'listening') later(function () { speak(w.kana); }, 600); // 自动朗读
+  if (rp) rp.addEventListener('click', function () { speak(w.kana, w.id); });
+  if (type === 'listening') later(function () { speak(w.kana, w.id); }, 600); // 自动朗读
 }
 
 /* 作答绑定；isQuiz 为 true 时走 quiz 流程（v0.3：纯选择题，无打字） */
@@ -1304,9 +1319,9 @@ function renderMiniQ() {
 function bindMiniQ(q) {
   var type = q.type;
   var kana = q.prompt && q.prompt.kana;
-  if (type === 'listening' && kana) later(function () { speak(kana); }, 500);
+  if (type === 'listening' && kana) later(function () { speak(kana, q.word_id); }, 500);
   var rp = $('#btn-replay');
-  if (rp && kana) rp.addEventListener('click', function () { speak(kana); });
+  if (rp && kana) rp.addEventListener('click', function () { speak(kana, q.word_id); });
   $$('.option').forEach(function (btn) {
     btn.addEventListener('click', function () {
       if (MQ.answered) return;
@@ -1443,7 +1458,7 @@ function renderReviewCard() {
     '<div id="rv-actions" style="margin-top:14px">' + actions + '</div>' +
     '<div style="margin-top:10px"><button class="btn btn-ghost" id="btn-detail" style="width:100%">查看详解 · 音形义用记</button></div>';
 
-  $('#btn-speak').addEventListener('click', function () { speak(w.kana); });
+  $('#btn-speak').addEventListener('click', function () { speak(w.kana, w.id); });
   var rb = $('#btn-rv-back');
   if (rb) rb.addEventListener('click', function () { if (RV.idx > 0) { RV.idx--; renderReviewCard(); } });
   var rvex = $('#btn-rv-exit');
@@ -1560,7 +1575,7 @@ function openWordDetail(wordId) {
     }
     var sheet = ov.querySelector('.detail-sheet');
     sheet.innerHTML = '<button class="detail-close" id="detail-close" aria-label="关闭">✕</button>' + secs.join('');
-    $('#detail-speak').addEventListener('click', function () { speak(w.kana); });
+    $('#detail-speak').addEventListener('click', function () { speak(w.kana, w.id); });
     $('#detail-close').addEventListener('click', close);
   }).catch(function (err) {
     ov.querySelector('.detail-sheet').innerHTML =
@@ -1725,9 +1740,9 @@ function renderQuizQ() {
 
   // 朗读题干 kana
   var kana = q.prompt.kana;
-  if (kana && (type === 'listening')) later(function () { speak(kana); }, 500);
+  if (kana && (type === 'listening')) later(function () { speak(kana, q.word_id); }, 500);
   var rp = $('#btn-replay');
-  if (rp && kana) rp.addEventListener('click', function () { speak(kana); });
+  if (rp && kana) rp.addEventListener('click', function () { speak(kana, q.word_id); });
 
   $$('.option').forEach(function (btn) {
     btn.addEventListener('click', function () {
