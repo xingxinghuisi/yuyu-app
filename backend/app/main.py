@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -925,6 +926,36 @@ def stats_overview(user: dict = Depends(current_user)):
         }
     finally:
         conn.close()
+
+
+# ---------------- 单词真人发音 MP3 (v0.7 VOICEVOX) ----------------
+
+def _audio_dir() -> Path:
+    """AUDIO_DIR 环境变量优先；默认找 backend/data/audio（开发）或 /app/app/data/audio（容器）。"""
+    env = os.environ.get("AUDIO_DIR")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve()
+    for c in [
+        here.parent.parent / "data" / "audio",          # backend/data/audio（开发）
+        Path("/app/app/data/audio"),                     # 容器内 COPY 位置
+        Path("/app/data/audio"),
+    ]:
+        if c.is_dir():
+            return c
+    return here.parent.parent / "data" / "audio"
+
+
+@app.get("/api/audio/{word_id}.mp3", include_in_schema=False)
+def word_audio(word_id: str):
+    """返回单词真人发音 MP3；不存在则 404（前端 fallback 到浏览器 TTS）。"""
+    # word_id 仅允许安全字符，防止路径穿越
+    if not word_id or not all(ch.isalnum() or ch in "-_" for ch in word_id):
+        raise HTTPException(status_code=404, detail="not found")
+    p = _audio_dir() / f"{word_id}.mp3"
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="no audio")
+    return FileResponse(str(p), media_type="audio/mpeg")
 
 
 # ---------------- 前端静态托管 (最后挂载) ----------------
