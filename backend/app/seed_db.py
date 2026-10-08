@@ -46,6 +46,14 @@ CREATE TABLE IF NOT EXISTS checkins (
   date    TEXT NOT NULL,
   UNIQUE (user_id, date)
 );
+
+CREATE TABLE IF NOT EXISTS starred_words (
+  user_id    INTEGER NOT NULL,
+  word_id    TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, word_id)
+);
+CREATE INDEX IF NOT EXISTS idx_starred_user ON starred_words(user_id, created_at);
 """
 
 
@@ -356,6 +364,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
         answer INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'jees-sample',
         created_at TEXT NOT NULL)""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sq_level ON sample_questions(level, section)")
+    # v0.8: 生词本（收藏）表，老库幂等补建
+    conn.execute("""CREATE TABLE IF NOT EXISTS starred_words (
+        user_id    INTEGER NOT NULL,
+        word_id    TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, word_id))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_starred_user ON starred_words(user_id, created_at)")
     _migrate_fsrs_columns(conn)
     _import_books(conn)
     _import_sample_questions(conn)
