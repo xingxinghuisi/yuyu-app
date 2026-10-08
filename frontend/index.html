@@ -68,7 +68,19 @@
 <script src="app.js"></script>
 <script>
 // 注册 Service Worker（PWA 离线能力）；每次启动主动检查更新，避免旧前端滞留
-if ('serviceWorker' in navigator) {
+// 热更新：新 SW 接管控制器后自动刷新一次（每会话一次），用户无需手动清缓存
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+  var hadController = !!navigator.serviceWorker.controller; // 首次安装时为 null，不触发刷新
+  var reloaded = false;
+  try { reloaded = sessionStorage.getItem('yuyu_sw_reloaded') === '1'; } catch (e) {}
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    try { sessionStorage.setItem('yuyu_sw_reloaded', '1'); } catch (e) {}
+    try { if (typeof toast === 'function') toast('新版本已就绪，正在更新…'); } catch (e) {}
+    setTimeout(function () { location.reload(); }, 800);
+  });
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').then(function (reg) {
       if (reg && reg.update) reg.update();
@@ -76,7 +88,7 @@ if ('serviceWorker' in navigator) {
       console.warn('SW 注册失败:', e);
     });
   });
-}
+})();
 </script>
 </body>
 </html>
