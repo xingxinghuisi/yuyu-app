@@ -425,7 +425,7 @@ html[data-theme="dark"] .login-scape .aurora { opacity: .55; }
 .ring-center b { font-size: 24px; }
 .ring-center span { font-size: 11px; color: var(--ink-soft); }
 
-.task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.task-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 .task-card {
   padding: 18px 16px;
   cursor: pointer;
