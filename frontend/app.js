@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '0.5.1';
+var APP_VERSION = '0.6.0';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -857,7 +857,8 @@ routes['home'] = renderHome;
 var TYPE_LABEL = {
   choice_ja: '看词选义',
   choice_zh: '看义选词',
-  listening: '听音选义'
+  listening: '听音选义',
+  sample: '官方样题'
 };
 
 var ST = null; // 学习会话状态
@@ -1207,6 +1208,14 @@ function quizQBody(q) {
       '<div class="options">' + (q.options || []).map(function (o, i) {
         return '<button class="option glass" data-i="' + i + '">' + esc(qOptText(o, 'meaning')) + '</button>';
       }).join('') + '</div>';
+  } else if (type === 'sample') {
+    // v0.6 官方样题：题干 + 4 选项（JEES 免费样题）
+    var sec = q.prompt.section === 'grammar' ? '〈文法〉' : '〈文字词汇〉';
+    body = '<div class="question-stem jp" style="font-size:18px;line-height:1.8;text-align:left;white-space:pre-wrap">' +
+      esc(sec + '\n' + (q.prompt.stem || '')) + '</div>' +
+      '<div class="options">' + (q.options || []).map(function (o, i) {
+        return '<button class="option glass" data-i="' + i + '"><span class="jp">' + esc(o) + '</span></button>';
+      }).join('') + '</div>';
   }
   return body;
 }
@@ -1522,14 +1531,27 @@ var QUIZ_COUNTS = [20, 30, 50];
 var QUIZ_SEC_PER_Q = 30; // 每题 30 秒
 
 function renderQuiz() {
-  // 设置页：级别 + 题量选择 + 开始
+  // 设置页：模式 + 级别 + 题量选择 + 开始
   var levels = ['N5', 'N4', 'N3', 'N2', 'N1'];
   var sel = QZ && QZ.level ? QZ.level : 'N5';
   var selCount = QZ && QZ.count ? QZ.count : 20;
+  var selMode = QZ && QZ.mode ? QZ.mode : 'normal';
+  var MODES = [
+    { key: 'normal', name: '词汇模考', desc: '按级别随机出题' },
+    { key: 'exam_freq', name: '真题高频', desc: '按 2010-2025 真题考频加权' },
+    { key: 'jees_sample', name: '官方样题', desc: 'JEES 官网免费样题（文字词汇·文法）' },
+  ];
   app.innerHTML =
     '<h2 class="page-title">模拟考试</h2>' +
     '<p class="page-sub">词汇专项 · 计时作答 · 交卷出成绩单</p>' +
     '<div class="glass panel" style="margin-top:16px">' +
+      '<h3>选择模式</h3>' +
+      '<div class="level-pills">' +
+      MODES.map(function (m) {
+        return '<button class="level-pill mode-pill' + (m.key === selMode ? ' active' : '') + '" data-m="' + m.key + '">' + m.name + '</button>';
+      }).join('') +
+      '</div>' +
+      '<div class="muted" id="quiz-mode-desc" style="font-size:12px;margin:4px 0 12px"></div>' +
       '<h3>选择级别</h3>' +
       '<div class="level-pills">' +
       levels.map(function (lv) {
@@ -1546,10 +1568,15 @@ function renderQuiz() {
       '<button class="btn btn-indigo" id="btn-quiz-start">开始模考</button>' +
     '</div>';
 
-  var level = sel, count = selCount;
-  var descEl = null;
+  var level = sel, count = selCount, mode = selMode;
+  var descEl = null, modeDescEl = null;
   function paintDesc() {
     if (descEl) descEl.textContent = count + ' 题 · 限时 ' + Math.round(count * QUIZ_SEC_PER_Q / 60) + ' 分钟，题型覆盖看词选义 / 看义选词 / 听音选义。';
+  }
+  function paintModeDesc() {
+    var m = null;
+    for (var i = 0; i < MODES.length; i++) if (MODES[i].key === mode) m = MODES[i];
+    if (modeDescEl && m) modeDescEl.textContent = m.desc;
   }
   $$('.level-pill[data-lv]').forEach(function (p) {
     p.addEventListener('click', function () {
@@ -1567,22 +1594,33 @@ function renderQuiz() {
     });
   });
   descEl = $('#quiz-desc');
-  paintDesc();
+  modeDescEl = $('#quiz-mode-desc');
+  paintDesc(); paintModeDesc();
+  $$('.mode-pill').forEach(function (p) {
+    p.addEventListener('click', function () {
+      $$('.mode-pill').forEach(function (x) { x.classList.remove('active'); });
+      p.classList.add('active');
+      mode = p.getAttribute('data-m');
+      paintModeDesc();
+    });
+  });
   $('#btn-quiz-start').addEventListener('click', function () {
-    startQuiz(level, count);
+    startQuiz(level, count, mode);
   });
 }
 
-function startQuiz(level, count) {
+function startQuiz(level, count, mode) {
   count = count || 20;
+  mode = mode || 'normal';
   app.innerHTML = loadingHtml('正在生成试卷…');
-  api('/quiz/start', 'POST', { level: level, count: count }).then(function (d) {
+  api('/quiz/start', 'POST', { level: level, count: count, mode: mode }).then(function (d) {
     var qs = d.questions || [];
     if (!qs.length) { toast('暂无题目'); renderQuiz(); return; }
     var seconds = qs.length * QUIZ_SEC_PER_Q;
     QZ = {
       level: level,
       count: qs.length,
+      mode: mode,
       questions: qs,
       idx: 0,
       answers: [],
@@ -1696,8 +1734,13 @@ function renderQuizResult(r) {
   var timeTxt = (um > 0 ? um + '分' : '') + us + '秒';
   celebrate();
 
+  var modeLabel = '';
+  if (QZ && QZ.mode === 'jees_sample') modeLabel = ' · <span style="color:var(--vermilion)">官方样题</span>';
+  else if (QZ && QZ.mode === 'exam_freq') modeLabel = ' · <span style="color:var(--vermilion)">真题高频</span>';
+
   app.innerHTML =
     '<div class="glass score-wrap">' +
+    '<div class="muted" style="font-size:12px;margin-bottom:8px">' + esc(QZ.level || '') + ' 模考' + modeLabel + '</div>' +
       '<div class="ring-wrap" style="width:130px;height:130px;margin:0 auto">' +
         '<svg width="130" height="130" viewBox="0 0 130 130">' +
           '<circle class="ring-bg" cx="65" cy="65" r="54" fill="none" stroke-width="12"/>' +
