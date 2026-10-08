@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '0.4.2';
+var APP_VERSION = '0.4.3';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -854,7 +854,6 @@ routes['home'] = renderHome;
 
 /* ================= 8. 页面：学习 ================= */
 /* v0.3: 零输入题型 —— 砍掉 spelling 打字题；listening 改为听音选义 */
-var STUDY_TYPES = ['choice_ja', 'choice_zh', 'listening'];
 var TYPE_LABEL = {
   choice_ja: '看词选义',
   choice_zh: '看义选词',
@@ -1025,15 +1024,12 @@ function startStudyFlow() {
     ST = {
       words: words,
       idx: 0,
-      typeIdx: 0,
-      phase: 'question', // question -> example -> next
-      answered: false,
-      correct: false,
+      done: 0,       // 已评分词数（frontier）；idx < done 时为回看模式
       goal: d.daily_goal || 30,
       baseLearned: d.today_learned || 0,
-      peer: true,  // 斩词分流：每词先过"认识吗"预检
       counted: 0,  // 本轮已产生 grade 的新词数
-      batch: []    // 当前待小测的词 id
+      batch: [],   // 当前待小测的词 id
+      grades: {}   // word_id -> grade（本轮评分记录，回看展示用）
     };
     renderStudyWord();
   }).catch(function (err) {
@@ -1049,62 +1045,6 @@ function studyProgressHtml(extra) {
     '<div class="txt">' + (ST.idx + 1) + ' / ' + ST.words.length + (extra ? ' · ' + extra : '') + '</div></div>';
 }
 
-/* 斩词分流 v0.3：展示卡片 → 心里回想 → 点"翻卡" → 三档自评（认识/模糊/不认识）。
-   认识 = grade 5 (FSRS Easy) 直接毕业；模糊/不认识 → 进入题型学习（由题目作答产生 grade）。 */
-function renderPeerCard() {
-  var w = ST.words[ST.idx];
-  ST.peerFlipped = false;
-  ST.peerDone = false;
-  app.innerHTML = studyProgressHtml('斩词预检') +
-    '<div id="word-card-zone">' + wordCardHtml(w, false) + '</div>' +
-    '<div class="glass peer-ask" id="peer-ask">' +
-      '<div class="peer-q">在心里回想它的意思</div>' +
-      '<div class="peer-btns"><button class="btn btn-primary" id="peer-flip">翻卡看看</button></div>' +
-    '</div>';
-  bindWordCard(w, 'peer');
-
-  $('#peer-flip').addEventListener('click', function () {
-    if (ST.peerFlipped) return;
-    ST.peerFlipped = true;
-    $('#word-card-zone').innerHTML = wordCardHtml(w, true); // 揭晓释义
-    bindWordCard(w, 'peer');
-    $('#peer-ask').innerHTML =
-      '<div class="peer-q">回想起来了吗？</div>' +
-      '<div class="peer-btns three">' +
-        '<button class="btn btn-primary" id="peer-know">认识</button>' +
-        '<button class="btn btn-ghost" id="peer-fuzzy">模糊</button>' +
-        '<button class="btn btn-ghost" id="peer-unknown">不认识</button>' +
-      '</div>';
-    $('#peer-know').addEventListener('click', function () {
-      if (ST.peerDone) return; ST.peerDone = true;
-      peerGraduate(w);
-    });
-    $('#peer-fuzzy').addEventListener('click', peerEnterLearn);
-    $('#peer-unknown').addEventListener('click', peerEnterLearn);
-  });
-}
-
-/* 认识：直接毕业 */
-function peerGraduate(w) {
-  api('/study/answer', 'POST', { word_id: w.id, grade: 5 }).catch(function () { /* 离线也继续 */ });
-  sakuraBurst(18);
-  vibrate(25);
-  toast('斩！');
-  ST.counted++;
-  ST.batch.push(w.id);
-  later(function () {
-    ST.idx++; ST.typeIdx++; ST.peer = true;
-    if (maybeMiniQuiz()) return;
-    renderStudyWord();
-  }, 500);
-}
-
-/* 模糊 / 不认识：进入题型学习 */
-function peerEnterLearn() {
-  ST.peer = false;
-  renderStudyWord();
-}
-
 /* 每累计学完 5 个新词（grade 参与过即算），自动弹 3 题快闪小测（v0.3） */
 function maybeMiniQuiz() {
   if (ST.counted > 0 && ST.counted % 5 === 0 && ST.batch.length) {
@@ -1117,20 +1057,6 @@ function maybeMiniQuiz() {
 }
 
 /* 从词池中为当前词挑选 n 个干扰项 */
-function distractors(pool, word, n, kind) {
-  var others = shuffle(pool.filter(function (w) { return w.id !== word.id; }));
-  var out = [];
-  var seen = {};
-  function keyOf(w) { return kind === 'meaning' ? w.display_meaning : wordFace(w); }
-  seen[keyOf(word)] = true;
-  for (var i = 0; i < others.length && out.length < n; i++) {
-    var k = keyOf(others[i]);
-    if (!seen[k]) { seen[k] = true; out.push(others[i]); }
-  }
-  return out;
-}
-
-/* 单词大卡（不含释义，供答题前展示） */
 function wordCardHtml(w, showMeaning) {
   var badge = (showMeaning && w.meaning_is_en_fallback)
     ? '<span class="badge-en">英文暂代</span>' : '';
@@ -1146,17 +1072,6 @@ function wordCardHtml(w, showMeaning) {
 }
 
 /* 答题前遮罩卡：看义选词 / 听发音选词时先隐藏单词，凭记忆作答 */
-var EYE_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M17.94 17.94A10.5 10.5 0 0 1 12 19.5c-5 0-9.27-3-11-7.5a17.6 17.6 0 0 1 4.06-4.94M9.9 4.24A10.5 10.5 0 0 1 12 4.5c5 0 9.27 3 11 7.5a17.7 17.7 0 0 1-2.16 3.19"/><path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/><path d="M2 2l20 20"/></svg>';
-function maskedCardHtml() {
-  return '<div class="glass word-mask" id="word-card">' +
-    '<div class="mask-icon">' + EYE_OFF_SVG + '</div>' +
-    '<p>凭记忆作答<br>答完后揭晓单词</p>' +
-  '</div>';
-}
-
-/* 例句区 */
-/* 例句译文: 中文 + 英文各一行 (有中文显示双语, 只有英文则只显示英文) */
 function exTransHtml(ex) {
   var h = '';
   if (ex.zh) h += '<div class="ex-zh">' + esc(ex.zh) + '</div>';
@@ -1179,56 +1094,71 @@ function exampleHtml(w) {
 
 /* 题目区 HTML（study 与 quiz 复用）
    v0.3: 看词选义 / 听音选义 → 4 个中文释义选项；看义选词 → 4 个单词选项；无打字题 */
-function questionHtml(type, w, pool, q) {
-  if (type === 'choice_ja' || type === 'listening') {
-    var opts = distractors(pool, w, 3, 'meaning');
-    var items = shuffle([{ w: w, ok: true }].concat(opts.map(function (o) { return { w: o, ok: false }; })));
-    var stem = type === 'listening'
-      ? '<div class="question-stem" style="text-align:center">听发音，选出正确的意思<br>' +
-        '<button class="speaker-btn" id="btn-replay" aria-label="重播发音">' + SPEAKER_SVG + '</button></div>'
-      : '<div class="question-stem muted">' + TYPE_LABEL[type] + '</div>';
-    return stem + '<div class="options">' + items.map(function (it) {
-      return '<button class="option glass" data-ok="' + (it.ok ? 1 : 0) + '">' + esc(it.w.display_meaning) + '</button>';
-    }).join('') + '</div>';
-  }
-  if (type === 'choice_zh') {
-    var opts2 = distractors(pool, w, 3, 'word');
-    var items2 = shuffle([{ w: w, ok: true }].concat(opts2.map(function (o) { return { w: o, ok: false }; })));
-    var head = '<div class="question-stem jp" style="font-size:19px;text-align:center">「' + esc(w.display_meaning) + '」</div>';
-    return head + '<div class="options">' + items2.map(function (it) {
-      return '<button class="option glass" data-ok="' + (it.ok ? 1 : 0) + '"><span class="jp">' +
-        esc(wordFace(it.w)) + '</span>' +
-        (it.w.kana && it.w.kanji ? ' <span class="muted" style="font-size:13px">' + esc(it.w.kana) + '</span>' : '') +
-        '</button>';
-    }).join('') + '</div>';
-  }
-  return '';
-}
-
+/* v0.4.3 学习（新词）展示式：完整展示单词 → 认识/不认识二档自评。
+   认识 = grade 4 (FSRS Good)；不认识 = grade 1 (FSRS Again)。
+   顶部「← 上一词」可回看，回看仅展示不重复计分（FSRS 状态机不受影响）。 */
 function renderStudyWord() {
   var w = ST.words[ST.idx];
   if (!w) { renderStudyDone(); return; }
-  if (ST.peer) { renderPeerCard(); return; } // 斩词分流：先过"认识吗"预检
-  var type = STUDY_TYPES[ST.typeIdx % STUDY_TYPES.length];
-  ST.type = type; ST.answered = false; ST.correct = false; ST.phase = 'question';
+  var history = ST.idx < ST.done; // 回看模式
+  var graded = ST.grades[w.id];
 
-  var progress = studyProgressHtml(TYPE_LABEL[type]);
-
-  // 看义选词 / 听发音选词：答题前隐藏单词卡，凭记忆作答
-  var hideWord = (type === 'choice_zh' || type === 'listening');
-
-  app.innerHTML = progress +
-    '<div id="word-card-zone">' + (hideWord ? maskedCardHtml() : wordCardHtml(w, false)) + '</div>' +
-    '<div id="q-zone">' + questionHtml(type, w, ST.words) + '</div>' +
-    '<div id="fb-zone"></div>' +
-    '<div id="ex-zone" class="hidden">' + exampleHtml(w) +
-      '<div style="margin-top:16px"><button class="btn btn-primary next-btn" id="btn-next">' +
-      (ST.idx === ST.words.length - 1 ? '完成今日学习' : '下一个') + '</button></div>' +
-      '<div style="margin-top:10px"><button class="btn btn-ghost" id="btn-detail" style="width:100%">查看详解 · 音形义用记</button></div>' +
+  var nav = '<div class="study-nav">' +
+    (ST.idx > 0
+      ? '<button class="btn btn-ghost btn-sm" id="btn-back">← 上一词</button>'
+      : '<span></span>') +
     '</div>';
 
-  bindWordCard(w, type);
-  bindQuestion(w, type, false);
+  var actions;
+  if (history) {
+    actions =
+      '<div class="study-graded">已记为：<b>' + (graded === 4 ? '✓ 认识' : '✗ 不认识') + '</b>' +
+      '<span class="muted">（回看不重复计分）</span></div>' +
+      '<button class="btn btn-primary" id="btn-fwd" style="width:100%">下一词 →</button>';
+  } else {
+    actions =
+      '<div class="study-grade-btns">' +
+        '<button class="btn btn-primary" id="btn-know">✓ 认识</button>' +
+        '<button class="btn btn-ghost" id="btn-unknown">✗ 不认识</button>' +
+      '</div>';
+  }
+
+  app.innerHTML = studyProgressHtml('学习 · 展示') + nav +
+    '<div id="word-card-zone">' + wordCardHtml(w, true) + '</div>' +
+    exampleHtml(w) +
+    '<div style="margin-top:10px"><button class="btn btn-ghost" id="btn-detail" style="width:100%">查看详解 · 音形义用记</button></div>' +
+    '<div id="study-actions" style="margin-top:16px">' + actions + '</div>';
+
+  bindWordCard(w);
+  var db = $('#btn-detail');
+  if (db) db.addEventListener('click', function () { openWordDetail(w.id); });
+  var bb = $('#btn-back');
+  if (bb) bb.addEventListener('click', function () { if (ST.idx > 0) { ST.idx--; renderStudyWord(); } });
+  var fw = $('#btn-fwd');
+  if (fw) fw.addEventListener('click', function () { ST.idx++; renderStudyWord(); });
+  if (!history) {
+    $('#btn-know').addEventListener('click', function () { studyGrade(w, true); });
+    $('#btn-unknown').addEventListener('click', function () { studyGrade(w, false); });
+  }
+}
+
+/* 新词评分：认识=4(Good) / 不认识=1(Again) */
+var _studyGrading = false;
+function studyGrade(w, know) {
+  if (_studyGrading) return;
+  _studyGrading = true;
+  var grade = know ? 4 : 1;
+  api('/study/answer', 'POST', { word_id: w.id, grade: grade }).catch(function () { /* 离线也继续 */ });
+  if (know) { celebrate(); vibrate(20); toast('记住了！'); }
+  else { toast('已记下，记得回来复习'); }
+  ST.grades[w.id] = grade;
+  ST.counted++; ST.batch.push(w.id);
+  ST.idx++; ST.done++;
+  later(function () {
+    _studyGrading = false;
+    if (maybeMiniQuiz()) return; // 每 5 词快闪小测
+    renderStudyWord();
+  }, know ? 450 : 300);
 }
 
 function bindWordCard(w, type) {
@@ -1244,69 +1174,7 @@ function bindWordCard(w, type) {
 }
 
 /* 作答绑定；isQuiz 为 true 时走 quiz 流程（v0.3：纯选择题，无打字） */
-function bindQuestion(w, type, isQuiz, qid) {
-  $$('#q-zone .option').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (ST && ST.answered && !isQuiz) return;
-      if (isQuiz && QZ.answered) return;
-      var good = btn.getAttribute('data-ok') === '1';
-      if (isQuiz) gradeQuizChoice(qid, good, btn, w);
-      else gradeStudyChoice(w, good, btn);
-    });
-  });
-}
-
 /* ---- study 作答 ---- */
-function lockOptions() {
-  $$('#q-zone .option').forEach(function (b) { b.disabled = true; });
-}
-
-function studyFeedback(ok, w) {
-  ST.answered = true; ST.correct = ok;
-  var grade = ok ? 5 : 2;
-  api('/study/answer', 'POST', { word_id: w.id, grade: grade }).catch(function () { /* 离线也继续 */ });
-  if (ok) {
-    celebrate();
-    toast('答对了');
-  } else {
-    var card = $('#word-card');
-    if (card) { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
-    $('#fb-zone').innerHTML = '<div class="answer-reveal">正确答案：<b class="jp">' +
-      (ST.type === 'choice_ja' ? esc(w.display_meaning) : esc(wordFace(w)) + '（' + esc(w.kana) + '）') +
-      '</b></div>';
-  }
-  $('#ex-zone').classList.remove('hidden');
-  // 揭晓：单词卡补上释义（含之前被遮罩的情况）
-  var zone = $('#word-card-zone');
-  if (zone) {
-    zone.innerHTML = wordCardHtml(w, true);
-    var b = $('#btn-speak');
-    if (b) b.addEventListener('click', function () { speak(w.kana); });
-  }
-  $('#btn-next').addEventListener('click', function () {
-    ST.counted++;
-    ST.batch.push(w.id);
-    ST.idx++; ST.typeIdx++; ST.peer = true;
-    if (maybeMiniQuiz()) return; // 每 5 词快闪小测
-    renderStudyWord();
-  });
-  var db = $('#btn-detail');
-  if (db) db.addEventListener('click', function () { openWordDetail(w.id); });
-  var nz = $('#ex-zone');
-  if (nz) nz.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function gradeStudyChoice(w, good, btn) {
-  lockOptions();
-  if (good) btn.classList.add('correct');
-  else {
-    btn.classList.add('wrong');
-    var right = $('.option[data-ok="1"]', $('#q-zone'));
-    if (right) right.classList.add('correct');
-  }
-  studyFeedback(good, w);
-}
-
 /* ================= 8b. 随堂小测（背词流每 5 词，简化版 quiz UI） ================= */
 var MQ = null; // 随堂小测会话
 
@@ -1448,7 +1316,7 @@ function renderReview() {
         '<h3>今日已全部复习完</h3><p>小岛的地基很牢固，休息一下吧。</p></div>';
       return;
     }
-    RV = { words: words, idx: 0, flipped: false };
+    RV = { words: words, idx: 0, done: 0, flipped: false, grades: {} };
     renderReviewCard();
   }).catch(function (err) {
     app.innerHTML = '<div class="loading">加载失败：' + esc(err.message) + '</div>';
@@ -1463,48 +1331,81 @@ function renderReviewCard() {
       '<a href="#/home" class="btn btn-primary" style="text-decoration:none;display:block">返回首页</a></div>';
     return;
   }
+  var history = RV.idx < RV.done; // 回看模式：仅展示，不重复计分
+  var graded = RV.grades[w.id];
   RV.flipped = false;
+
+  var nav = '<div class="study-nav">' +
+    (RV.idx > 0
+      ? '<button class="btn btn-ghost btn-sm" id="btn-rv-back">← 上一词</button>'
+      : '<span></span>') +
+    '</div>';
+
+  var meaningBlock =
+    '<div id="review-back" class="' + (history ? '' : 'hidden') + '" style="margin-top:14px;border-top:1px solid var(--glass-border);padding-top:16px">' +
+      '<div style="font-size:17px">' + esc(w.display_meaning) +
+      (w.meaning_is_en_fallback ? '<span class="badge-en">英文暂代</span>' : '') + mtBadge(w) + '</div>' +
+    '</div>';
+
+  var actions;
+  if (history) {
+    var glabel = graded === 5 ? '✓ 认识' : (graded === 3 ? '～ 模糊' : '✗ 忘记');
+    actions =
+      '<div class="study-graded">已记为：<b>' + glabel + '</b>' +
+      '<span class="muted">（回看不重复计分）</span></div>' +
+      '<button class="btn btn-primary" id="btn-rv-fwd" style="width:100%">下一张 →</button>';
+  } else {
+    actions =
+      '<div class="review-actions" id="grade-btns">' +
+        '<button class="btn grade-forgot" data-grade="0">忘记</button>' +
+        '<button class="btn grade-fuzzy" data-grade="3">模糊</button>' +
+        '<button class="btn grade-know" data-grade="5">认识</button>' +
+      '</div>';
+  }
+
   app.innerHTML =
     '<div class="quiz-progress"><div class="bar"><i style="width:' +
     Math.round(RV.idx / RV.words.length * 100) + '%"></i></div>' +
-    '<div class="txt">' + (RV.idx + 1) + ' / ' + RV.words.length + '</div></div>' +
+    '<div class="txt">' + (RV.idx + 1) + ' / ' + RV.words.length + ' · 复习翻牌</div></div>' + nav +
     '<div class="glass word-card" id="review-card">' +
       '<div class="word-kanji">' + wordFaceRuby(w) + '</div>' +
       (w.romaji ? '<div class="word-romaji">' + esc(w.romaji) + '</div>' : '') +
       '<div><button class="speaker-btn" id="btn-speak" aria-label="朗读">' + SPEAKER_SVG + '</button></div>' +
-      '<div id="review-back" class="hidden" style="margin-top:14px;border-top:1px solid var(--glass-border);padding-top:16px">' +
-        '<div style="font-size:17px">' + esc(w.display_meaning) +
-        (w.meaning_is_en_fallback ? '<span class="badge-en">英文暂代</span>' : '') + mtBadge(w) + '</div>' +
-      '</div>' +
+      meaningBlock +
     '</div>' +
-    '<div class="review-actions" id="grade-btns">' +
-      '<button class="btn grade-forgot" data-grade="0">忘记</button>' +
-      '<button class="btn grade-fuzzy" data-grade="3">模糊</button>' +
-      '<button class="btn grade-know" data-grade="5">认识</button>' +
-    '</div>' +
-    '<div id="review-next" class="hidden" style="margin-top:14px">' + exampleHtml(w) +
-      '<div style="margin-top:16px"><button class="btn btn-primary" id="btn-rv-next">下一张</button></div>' +
-      '<div style="margin-top:10px"><button class="btn btn-ghost" id="btn-detail" style="width:100%">查看详解 · 音形义用记</button></div>' +
-    '</div>';
+    (history ? '<div style="margin-top:14px">' + exampleHtml(w) + '</div>' : '') +
+    '<div id="rv-actions" style="margin-top:14px">' + actions + '</div>' +
+    '<div style="margin-top:10px"><button class="btn btn-ghost" id="btn-detail" style="width:100%">查看详解 · 音形义用记</button></div>';
 
   $('#btn-speak').addEventListener('click', function () { speak(w.kana); });
+  var rb = $('#btn-rv-back');
+  if (rb) rb.addEventListener('click', function () { if (RV.idx > 0) { RV.idx--; renderReviewCard(); } });
+  var fw = $('#btn-rv-fwd');
+  if (fw) fw.addEventListener('click', function () { RV.idx++; renderReviewCard(); });
 
-  $$('#grade-btns .btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (RV.flipped) return;
-      RV.flipped = true;
-      var grade = parseInt(btn.getAttribute('data-grade'), 10);
-      api('/review/answer', 'POST', { word_id: w.id, grade: grade }).catch(function () {});
-      if (grade === 5) celebrate();
-      $('#review-back').classList.remove('hidden');
-      $('#grade-btns').classList.add('hidden');
-      $('#review-next').classList.remove('hidden');
+  if (!history) {
+    // 正常翻牌流程：先回想 → 点三档 → 揭晓释义+例句 → 下一张
+    var nextHtml = exampleHtml(w) +
+      '<div style="margin-top:16px"><button class="btn btn-primary" id="btn-rv-next">下一张</button></div>';
+    $$('#grade-btns .btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (RV.flipped) return;
+        RV.flipped = true;
+        var grade = parseInt(btn.getAttribute('data-grade'), 10);
+        api('/review/answer', 'POST', { word_id: w.id, grade: grade }).catch(function () {});
+        RV.grades[w.id] = grade;
+        RV.done++;
+        if (grade === 5) celebrate();
+        $('#review-back').classList.remove('hidden');
+        $('#grade-btns').classList.add('hidden');
+        $('#rv-actions').innerHTML = nextHtml;
+        $('#btn-rv-next').addEventListener('click', function () {
+          RV.idx++;
+          renderReviewCard();
+        });
+      });
     });
-  });
-  $('#btn-rv-next').addEventListener('click', function () {
-    RV.idx++;
-    renderReviewCard();
-  });
+  }
   var rdb = $('#btn-detail');
   if (rdb) rdb.addEventListener('click', function () { openWordDetail(w.id); });
 }
@@ -1721,8 +1622,6 @@ function renderQuizQ() {
   });
 }
 
-function gradeQuizChoice(qid, good, btn, w) { /* study 路径专用，quiz 走 renderQuizQ 内联 */ }
-
 function submitQuiz() {
   if (!QZ || QZ.done) return;
   QZ.done = true;
@@ -1888,6 +1787,16 @@ function renderMe() {
       '<p class="muted seg-note">释义与例句将按所选语言展示，切换后自动刷新页面。</p>' +
     '</div>' +
 
+    '<div class="glass setting-card">' +
+      '<h3>每日学习目标</h3>' +
+      '<div class="goal-stepper">' +
+        '<button class="btn btn-ghost" id="goal-minus" aria-label="减少">−</button>' +
+        '<span class="goal-val"><b id="goal-num">30</b><span class="muted"> 词 / 天</span></span>' +
+        '<button class="btn btn-ghost" id="goal-plus" aria-label="增加">＋</button>' +
+      '</div>' +
+      '<p class="muted seg-note">1–200 之间，首页今日进度环按此目标计算。</p>' +
+    '</div>' +
+
     '<div class="glass bind-form">' +
       '<h3>绑定邮箱 / 手机</h3>' +
       '<div class="field" id="f-email">' +
@@ -1923,7 +1832,7 @@ function renderMe() {
   }
   paintLangSeg(userLang());
 
-  // 回显已绑定信息与语言偏好
+  // 回显已绑定信息、语言偏好与每日目标
   api('/auth/me').then(function (me) {
     if (me.email) $('#in-email').value = me.email;
     if (me.phone) $('#in-phone').value = me.phone;
@@ -1932,7 +1841,35 @@ function renderMe() {
       localStorage.setItem(LANG_KEY, me.lang);
       paintLangSeg(me.lang);
     }
+    paintGoal(me.daily_goal || 30);
   }).catch(function () { /* 忽略回显失败 */ });
+
+  // 每日学习目标步进器：PUT /api/auth/profile {daily_goal}
+  var goalTimer = null;
+  function paintGoal(v) {
+    v = Math.max(1, Math.min(200, parseInt(v, 10) || 30));
+    var el = $('#goal-num');
+    if (el) el.textContent = v;
+    return v;
+  }
+  function saveGoal(v) {
+    v = paintGoal(v);
+    if (goalTimer) clearTimeout(goalTimer);
+    goalTimer = setTimeout(function () {
+      api('/auth/profile', 'PUT', { daily_goal: v }).then(function () {
+        toast('每日目标已设为 ' + v + ' 词');
+      }).catch(function (err) {
+        toast((err && err.message) || '保存失败');
+      });
+    }, 600);
+  }
+  var gm = $('#goal-minus'), gp = $('#goal-plus');
+  if (gm) gm.addEventListener('click', function () {
+    saveGoal((parseInt($('#goal-num').textContent, 10) || 30) - 1);
+  });
+  if (gp) gp.addEventListener('click', function () {
+    saveGoal((parseInt($('#goal-num').textContent, 10) || 30) + 1);
+  });
 
   // 语言切换：PUT /api/auth/profile {lang}，成功后刷新页面重拉数据
   $$('#lang-seg button').forEach(function (b) {
