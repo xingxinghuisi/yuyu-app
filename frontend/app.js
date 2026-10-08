@@ -9,6 +9,9 @@
    ============================================================ */
 'use strict';
 
+/* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
+var APP_VERSION = '0.4.2';
+
 /* ================= 0. 基础工具 ================= */
 
 var $ = function (sel, el) { return (el || document).querySelector(sel); };
@@ -869,18 +872,38 @@ var SHELF_CATS = [
   { key: 'textbook', title: '教材' },
 ];
 
-/* #/study 入口：书架 */
+/* #/study 入口：书架（顶部带今日 hub 条：进度/打卡/岛屿） */
 function renderStudy() {
   app.innerHTML = loadingHtml('正在取书…');
-  api('/books').then(function (books) {
-    renderShelf(Array.isArray(books) ? books : []);
-  }).catch(function () {
-    renderShelf(null); // 接口不可用时优雅降级：仍可按级别进入学习
+  Promise.all([
+    api('/books').catch(function () { return null; }),
+    api('/home/summary').catch(function () { return null; }),
+    api('/island').catch(function () { return null; })
+  ]).then(function (res) {
+    renderShelf(Array.isArray(res[0]) ? res[0] : null, res[1] || {}, res[2]);
   });
 }
 
+/* 书架顶部今日 hub 条 */
+function hubStripHtml(d, isl) {
+  var learned = d.today_learned || 0;
+  var goal = d.daily_goal || 30;
+  var streak = d.streak || 0;
+  var checked = !!d.checked_in_today;
+  var islTxt = isl ? ('我的岛屿 Lv.' + isl.level + ' · ' + isl.level_name) : '我的岛屿';
+  return '<div class="glass hub-strip">' +
+    '<div class="hub-today"><b>' + learned + '</b><span>/' + goal + ' 今日已学</span>' +
+      '<span class="hub-streak">🔥' + streak + '天</span></div>' +
+    '<div class="hub-actions">' +
+      (checked
+        ? '<span class="hub-checked">今日已打卡</span>'
+        : '<button class="btn btn-primary btn-sm" id="hub-checkin">打卡</button>') +
+      '<a class="hub-island" href="#/home">' + esc(islTxt) + ' →</a>' +
+    '</div></div>';
+}
+
 /* 书架渲染：按维度分组的玻璃书卡（名称、x/总数、进度条） */
-function renderShelf(books) {
+function renderShelf(books, summary, isl) {
   var hasData = !!books;
   var list = books || [
     { id: 'level-n5', name: 'N5', category: 'level', level: 'N5' },
@@ -911,7 +934,8 @@ function renderShelf(books) {
     '</button>';
   }
 
-  var html = '<h2 class="page-title">书架</h2>' +
+  var html = hubStripHtml(summary || {}, isl) +
+    '<h2 class="page-title">书架</h2>' +
     '<p class="page-sub">选一本书，开始今日的筑岛之旅。</p>';
   groups.forEach(function (g) {
     html += '<h3 class="shelf-cat">' + esc(g.title) + '</h3>' +
@@ -921,6 +945,30 @@ function renderShelf(books) {
   app.innerHTML = html;
 
   if (!hasData) toast('书架数据暂不可用，可直接选书开始');
+  var hcb = $('#hub-checkin');
+  if (hcb) hcb.addEventListener('click', function () {
+    hcb.disabled = true; hcb.textContent = '打卡中…';
+    api('/checkin', 'POST').then(function (r) {
+      celebrate();
+      var newStreak = (r.streak != null ? r.streak : ((summary && summary.streak) || 0) + 1);
+      toast('打卡成功，连续 ' + newStreak + ' 天');
+      Promise.all([
+        api('/island').catch(function () { return null; }),
+        api('/home/summary').catch(function () { return null; })
+      ]).then(function (res) {
+        renderStudy();
+        showPoster({
+          streak: newStreak,
+          todayLearned: (res[1] && res[1].today_learned) || 0,
+          totalWords: (res[0] && res[0].total_words) || 0,
+          islandLevel: (res[0] && res[0].level) || 1
+        });
+      });
+    }).catch(function (err) {
+      hcb.disabled = false; hcb.textContent = '打卡';
+      toast((err && err.message) || '打卡失败，请稍后重试');
+    });
+  });
   $$('.book').forEach(function (el) {
     el.addEventListener('click', function () {
       var bid = el.getAttribute('data-bid');
@@ -1108,15 +1156,24 @@ function maskedCardHtml() {
 }
 
 /* 例句区 */
+/* 例句译文: 中文 + 英文各一行 (有中文显示双语, 只有英文则只显示英文) */
+function exTransHtml(ex) {
+  var h = '';
+  if (ex.zh) h += '<div class="ex-zh">' + esc(ex.zh) + '</div>';
+  if (ex.en) h += '<div class="ex-en">' + esc(ex.en) + '</div>';
+  if (!h) {
+    var s = ex.display_sentence || '';
+    if (s) h = '<div class="ex-zh">' + esc(s) + '</div>';
+  }
+  return h;
+}
 function exampleHtml(w) {
   var ex = (w.examples && w.examples[0]) || null;
   if (!ex) return '';
-  // 展示语言由后端按用户 lang 算好（display_sentence），前端不再做语言判断
-  var sent = ex.display_sentence || ex.zh || ex.en || '';
   return '<div class="glass example-box">' +
     '<div class="ex-label">例句 EXAMPLE</div>' +
     '<div class="ex-ja">' + furiganaToRuby(ex.furigana || ex.ja) + '</div>' +
-    '<div class="ex-zh">' + esc(sent) + '</div>' +
+    exTransHtml(ex) +
   '</div>';
 }
 
@@ -1510,17 +1567,16 @@ function openWordDetail(wordId) {
         ? '<div class="detail-meaning-en muted">' + esc(w.meaning_en) + '</div>' : '') +
       '</section>'
     );
-    /* 用：最多 3 条例句（日文+振假名+译文；中文译文暂无则用英文） */
+    /* 用：最多 3 条例句（日文+振假名+中英译文） */
     var exs = (w.examples || []).slice(0, 3);
     if (exs.length) {
       secs.push(
         '<section class="glass detail-sec">' +
         '<h3 class="detail-sec-title">用 <span class="detail-sec-en">EXAMPLES</span></h3>' +
         exs.map(function (e) {
-          var sent = e.display_sentence || e.zh || e.en || '';
           return '<div class="detail-ex">' +
             '<div class="ex-ja">' + furiganaToRuby(e.furigana || e.ja) + '</div>' +
-            (sent ? '<div class="ex-zh">' + esc(sent) + '</div>' : '') +
+            exTransHtml(e) +
           '</div>';
         }).join('') + '</section>'
       );
@@ -1851,7 +1907,8 @@ function renderMe() {
       '<h3>关于数据</h3>' +
       '词库来源：OpenJLPT、JMdict-EDICT，例句来自 Tatoeba。<br>' +
       '以上数据均以 CC BY-SA 4.0 协议共享，版权归各自贡献者所有。<br>' +
-      '语屿 Kotoba · 每天十五分钟，筑一座日语之岛。' +
+      '语屿 Kotoba · 每天十五分钟，筑一座日语之岛。<br>' +
+      '<span class="muted">版本 v' + APP_VERSION + '</span>' +
     '</div>' +
 
     '<div class="glass danger-zone">' +
