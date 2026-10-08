@@ -484,7 +484,52 @@ def main():
         except OSError:
             pass
 
-    # 12. health
+    # 12. v0.8 生词本
+    # 取一个真实 word_id
+    s, vl = api("GET", "/api/vocab?level=N5&limit=1", token=token)
+    test_wid = vl[0]["id"] if s == 200 and isinstance(vl, list) and vl else None
+    if test_wid:
+        # 未登录应 401
+        s, _ = api("POST", f"/api/star/{test_wid}")
+        step("star unauth 401", s == 401, f"{s}")
+        # toggle 收藏
+        s, r = api("POST", f"/api/star/{test_wid}", token=token)
+        step("star toggle on", s == 200 and r.get("starred") is True, f"{s} {r}")
+        # 查状态
+        s, r = api("GET", f"/api/star/{test_wid}", token=token)
+        step("star get true", s == 200 and r.get("starred") is True, f"{s} {r}")
+        # 列表包含
+        s, r = api("GET", "/api/starred", token=token)
+        wids = [it.get("id") for it in r.get("items", [])]
+        step("starred list contains", s == 200 and test_wid in wids, f"{s} total={r.get('total')}")
+        # 取消
+        s, r = api("POST", f"/api/star/{test_wid}", token=token)
+        step("star toggle off", s == 200 and r.get("starred") is False, f"{s} {r}")
+        s, r = api("GET", f"/api/star/{test_wid}", token=token)
+        step("star get false", s == 200 and r.get("starred") is False, f"{s} {r}")
+        # 不存在的词 404
+        s, _ = api("POST", "/api/star/NO_SUCH_WORD_XYZ", token=token)
+        step("star 404 bad word", s == 404, f"{s}")
+    else:
+        step("star tests skipped (no word)", False, "no word id")
+
+    # 13. v0.8 学习统计
+    s, _ = api("GET", "/api/stats/summary")
+    step("stats unauth 401", s == 401, f"{s}")
+    s, st = api("GET", "/api/stats/summary", token=token)
+    ok_shape = (
+        s == 200 and isinstance(st.get("daily"), list) and len(st["daily"]) == 14
+        and "retention" in st and "streak" in st and "total" in st
+    )
+    step("stats shape", ok_shape, f"{s}")
+    # 有数据情况：先学一个词再查
+    if test_wid:
+        api("POST", "/api/study/answer", {"word_id": test_wid, "grade": 4}, token=token)
+        s, st2 = api("GET", "/api/stats/summary", token=token)
+        has_new = any(d.get("new", 0) > 0 for d in st2.get("daily", []))
+        step("stats has data after study", s == 200 and has_new, f"{s}")
+
+    # 14. health
     s, h = api("GET", "/api/health")
     step("health", s == 200 and h.get("ok") is True, f"{s} {h}")
 
