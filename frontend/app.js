@@ -1915,7 +1915,8 @@ function renderMe() {
       '词库来源：OpenJLPT、JMdict-EDICT，例句来自 Tatoeba。<br>' +
       '以上数据均以 CC BY-SA 4.0 协议共享，版权归各自贡献者所有。<br>' +
       '语屿 Kotoba · 每天十五分钟，筑一座日语之岛。<br>' +
-      '<span class="muted">版本 v' + APP_VERSION + '</span>' +
+      '<span class="muted">版本 v' + APP_VERSION + '</span> ' +
+      '<button class="btn btn-ghost btn-sm" id="btn-check-update" style="margin-left:8px">检查更新</button>' +
     '</div>' +
 
     '<div class="glass danger-zone">' +
@@ -2016,6 +2017,27 @@ function renderMe() {
     confirmModal('退出登录', '确定要退出当前账号吗？', '退出').then(function (yes) {
       if (yes) { toast('已退出登录'); logout(); }
     });
+  });
+  // 手动检查更新：强制刷新 SW，发现新版走热更新流程
+  var cbu = $('#btn-check-update');
+  if (cbu) cbu.addEventListener('click', function () {
+    if (!('serviceWorker' in navigator)) { toast('当前浏览器不支持'); return; }
+    cbu.disabled = true;
+    cbu.textContent = '检查中…';
+    var done = function (msg) { toast(msg); cbu.disabled = false; cbu.textContent = '检查更新'; };
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      if (!reg) { done('未启用离线功能'); return; }
+      var found = false;
+      var onUpdate = function () { found = true; };
+      reg.addEventListener('updatefound', onUpdate);
+      reg.update().then(function () {
+        setTimeout(function () {
+          reg.removeEventListener('updatefound', onUpdate);
+          // 若 3 秒内无新版，controllerchange 也不会触发，说明已是最新
+          setTimeout(function () { if (!found) done('已是最新版本 v' + APP_VERSION); }, 3000);
+        }, 500);
+      }).catch(function () { done('检查失败，请稍后重试'); });
+    }).catch(function () { done('检查失败，请稍后重试'); });
   });
 
   $('#row-delete').addEventListener('click', function () {
