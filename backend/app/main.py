@@ -928,6 +928,176 @@ def stats_overview(user: dict = Depends(current_user)):
         conn.close()
 
 
+# ---------------- 生词本 (v0.8) ----------------
+
+@app.post("/api/star/{word_id}")
+def toggle_star(word_id: str, user: dict = Depends(current_user)):
+    """收藏/取消收藏切换。word_id 不存在则 404。"""
+    conn = get_db()
+    try:
+        w = fetch_word(conn, word_id)
+        if w is None:
+            raise HTTPException(status_code=404, detail="word not found")
+        exists = conn.execute(
+            "SELECT 1 FROM starred_words WHERE user_id=? AND word_id=?",
+            (user["id"], word_id),
+        ).fetchone()
+        with _write_lock:
+            if exists:
+                conn.execute(
+                    "DELETE FROM starred_words WHERE user_id=? AND word_id=?",
+                    (user["id"], word_id),
+                )
+                starred = False
+            else:
+                conn.execute(
+                    "INSERT INTO starred_words (user_id, word_id, created_at) VALUES (?,?,?)",
+                    (user["id"], word_id, now_iso()),
+                )
+                starred = True
+            conn.commit()
+        return {"word_id": word_id, "starred": starred}
+    finally:
+        conn.close()
+
+
+@app.get("/api/star/{word_id}")
+def get_star(word_id: str, user: dict = Depends(current_user)):
+    conn = get_db()
+    try:
+        starred = (
+            conn.execute(
+                "SELECT 1 FROM starred_words WHERE user_id=? AND word_id=?",
+                (user["id"], word_id),
+            ).fetchone()
+            is not None
+        )
+        return {"word_id": word_id, "starred": starred}
+    finally:
+        conn.close()
+
+
+@app.get("/api/starred")
+def list_starred(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    user: dict = Depends(current_user),
+):
+    """生词本列表：按收藏时间倒序，附带掌握度（user_words）。"""
+    conn = get_db()
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) AS c FROM starred_words WHERE user_id=?", (user["id"],)
+        ).fetchone()["c"]
+        rows = conn.execute(
+            """SELECT sw.word_id AS wid, sw.created_at AS starred_at,
+                      w.*, uw.repetitions AS uw_repetitions, uw.interval AS uw_interval,
+                      uw.fsrs_stability AS uw_stability
+               FROM starred_words sw
+               JOIN words w ON w.id = sw.word_id
+               LEFT JOIN user_words uw ON uw.user_id = sw.user_id AND uw.word_id = sw.word_id
+               WHERE sw.user_id=?
+               ORDER BY sw.created_at DESC LIMIT ? OFFSET ?""",
+            (user["id"], per_page, (page - 1) * per_page),
+        ).fetchall()
+        lang = user.get("lang") or "zh"
+        items = []
+        for r in rows:
+            d = word_to_dict(r, conn, lang)
+            d["starred_at"] = r["starred_at"]
+            # 掌握度：0 未学 / 1 学习中 / 2 已掌握（沿用 stats 口径）
+            rep = r["uw_repetitions"]
+            if rep is None:
+                d["mastery"] = 0
+            elif rep >= 5 or (r["uw_interval"] or 0) >= 30:
+                d["mastery"] = 2
+            else:
+                d["mastery"] = 1
+            d["starred"] = True
+            items.append(d)
+        return {"items": items, "total": total, "page": page, "per_page": per_page}
+    finally:
+        conn.close()
+
+
+# ---------------- 学习统计 (v0.8) ----------------
+
+@app.get("/api/stats/summary")
+def stats_summary(user: dict = Depends(current_user)):
+    """学习统计：14 天新学/复习、7 天保持率、连续学习天数、累计/掌握词数。"""
+    conn = get_db()
+    try:
+        uid = user["id"]
+        # 14 天每天：新学（首次出现日）/ 复习（此前学过）
+        daily = []
+        for i in range(13, -1, -1):
+            d = (now_dt() - timedelta(days=i)).strftime("%Y-%m-%d")
+            new_c = conn.execute(
+                """SELECT COUNT(DISTINCT sl.word_id) AS c FROM study_logs sl
+                   WHERE sl.user_id=? AND substr(sl.created_at,1,10)=?
+                   AND NOT EXISTS (
+                     SELECT 1 FROM study_logs s2
+                     WHERE s2.user_id=sl.user_id AND s2.word_id=sl.word_id
+                       AND substr(s2.created_at,1,10) < ?)""",
+                (uid, d, d),
+            ).fetchone()["c"]
+            rev_c = conn.execute(
+                """SELECT COUNT(DISTINCT sl.word_id) AS c FROM study_logs sl
+                   WHERE sl.user_id=? AND substr(sl.created_at,1,10)=?
+                   AND EXISTS (
+                     SELECT 1 FROM study_logs s2
+                     WHERE s2.user_id=sl.user_id AND s2.word_id=sl.word_id
+                       AND substr(s2.created_at,1,10) < ?)""",
+                (uid, d, d),
+            ).fetchone()["c"]
+            daily.append({"date": d, "new": new_c, "review": rev_c})
+        # 7 天保持率：grade>=3 算答对
+        since7 = (now_dt() - timedelta(days=6)).strftime("%Y-%m-%d")
+        r = conn.execute(
+            """SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN grade>=3 THEN 1 ELSE 0 END) AS correct
+               FROM study_logs WHERE user_id=? AND substr(created_at,1,10)>=?
+               AND grade IS NOT NULL""",
+            (uid, since7),
+        ).fetchone()
+        total7, correct7 = r["total"] or 0, r["correct"] or 0
+        retention = {
+            "rate": round(correct7 / total7, 3) if total7 else None,
+            "correct": correct7,
+            "total": total7,
+        }
+        # 连续学习天数：按 study_logs 去重日期
+        day_rows = conn.execute(
+            "SELECT DISTINCT substr(created_at,1,10) AS d FROM study_logs"
+            " WHERE user_id=? ORDER BY d DESC",
+            (uid,),
+        ).fetchall()
+        day_set = {row["d"] for row in day_rows}
+        cur = today_str()
+        if cur not in day_set:
+            cur = (now_dt() - timedelta(days=1)).strftime("%Y-%m-%d")
+        streak = 0
+        while cur in day_set:
+            streak += 1
+            cur = (datetime.strptime(cur, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        # 累计 / 已掌握（沿用 stats/overview 口径）
+        studied = conn.execute(
+            "SELECT COUNT(*) c FROM user_words WHERE user_id=?", (uid,)
+        ).fetchone()["c"]
+        mastered = conn.execute(
+            "SELECT COUNT(*) c FROM user_words WHERE user_id=? AND (repetitions>=5 OR interval>=30)",
+            (uid,),
+        ).fetchone()["c"]
+        return {
+            "daily": daily,
+            "retention": retention,
+            "streak": streak,
+            "total": {"studied": studied, "mastered": mastered},
+        }
+    finally:
+        conn.close()
+
+
 # ---------------- 单词真人发音 MP3 (v0.7 VOICEVOX) ----------------
 
 def _audio_dir() -> Path:
