@@ -85,7 +85,9 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
     seed = find_seed_db()
     if seed is None:
         raise FileNotFoundError("seed db not found; cannot import vocab tables")
-    conn.execute(f"ATTACH DATABASE '{seed}' AS seed")
+    # 先提交: 避免 ATTACH 后跨库操作受未提交事务影响 (见 _import_books 注释)
+    conn.commit()
+    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
     try:
         if "words" in needed:
             conn.execute("""CREATE TABLE words (
@@ -118,6 +120,94 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
             cols = ", ".join(_KANJI_COLS)
             conn.execute(f"INSERT INTO kanji ({cols}) SELECT {cols} FROM seed.kanji")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_kanji_level ON kanji(level)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("DETACH seed")
+
+
+_BOOKS_COLS = ("id", "name", "category", "level", "description", "sort_order")
+_BOOK_WORDS_COLS = ("book_id", "word_id", "sort_order")
+
+
+def _import_books(conn: sqlite3.Connection) -> None:
+    """v0.4: books/book_words 词书表从种子库导入 (幂等, 老用户进度不受影响)。
+
+    注意: 种子库以只读方式 ATTACH, 防止任何意外写入。
+    表存在但为空时不直接返回: 旧种子库场景下 books 会是空表,
+    新种子库到位后重启即可自动补上 (自愈, 无需手动删表)。
+    book_words 用 CREATE IF NOT EXISTS + DELETE (不用 DROP+CREATE):
+    同一事务内 DROP 后重建同名表会导致后续跨库 INSERT 报 no such table (SQLite 特性)。
+    """
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "books" in tables and "book_words" in tables:
+        n = conn.execute("SELECT COUNT(*) FROM books").fetchone()[0]
+        m = conn.execute("SELECT COUNT(*) FROM book_words").fetchone()[0]
+        if n > 0 and m > 0:
+            return
+    seed = find_seed_db()
+    if seed is None:
+        raise FileNotFoundError("seed db not found; cannot import books")
+    conn.commit()
+    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    try:
+        seed_tables = {r[0] for r in conn.execute(
+            "SELECT name FROM seed.sqlite_master WHERE type='table'")}
+        if "books" not in tables:
+            conn.execute("""CREATE TABLE books (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+                level TEXT, description TEXT, sort_order INTEGER NOT NULL DEFAULT 0)""")
+        # books 为空 (旧种子场景) 时也要从新种子补上
+        if conn.execute("SELECT COUNT(*) FROM books").fetchone()[0] == 0:
+            if "books" in seed_tables:
+                cols = ", ".join(_BOOKS_COLS)
+                conn.execute(f"INSERT INTO books ({cols}) SELECT {cols} FROM seed.books")
+        # book_words 全量重建 (幂等: 清空后重插, 词书内容以种子库为准)
+        conn.execute("""CREATE TABLE IF NOT EXISTS book_words (
+            book_id TEXT NOT NULL, word_id TEXT NOT NULL, sort_order INTEGER NOT NULL,
+            PRIMARY KEY (book_id, word_id))""")
+        conn.execute("DELETE FROM book_words")
+        if "book_words" in seed_tables:
+            cols = ", ".join(_BOOK_WORDS_COLS)
+            conn.execute(f"INSERT INTO book_words ({cols}) SELECT {cols} FROM seed.book_words")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_book_words ON book_words(book_id, sort_order)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("DETACH seed")
+
+
+def _backfill_zh(conn: sqlite3.Connection) -> None:
+    """v0.4.1: 用种子库的 meaning_zh 补齐已有 words 行的中文释义 (幂等)。
+
+    只填 meaning_zh 为空的行, 已有中文 (含用户未来的人工校对) 永不覆盖。
+    场景: 老版本 app.db 已存在 words, _import_vocab_tables 不会重导,
+    此时 N4-N1 机翻中文只在新种子库里, 需要一次回填。
+    """
+    seed = find_seed_db()
+    if seed is None:
+        raise FileNotFoundError("seed db not found; cannot backfill zh")
+    cols = _column_names(conn, "words")
+    if "meaning_zh" not in cols:
+        return
+    conn.commit()
+    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    try:
+        seed_cols = {r[1] for r in conn.execute("PRAGMA seed.table_info(words)")}
+        if "meaning_zh" not in seed_cols:
+            return
+        cur = conn.execute("""
+            UPDATE words
+            SET meaning_zh = (SELECT s.meaning_zh FROM seed.words s WHERE s.id = words.id),
+                zh_source = COALESCE((SELECT s.zh_source FROM seed.words s WHERE s.id = words.id), 'mt')
+            WHERE (meaning_zh IS NULL OR meaning_zh = '')
+              AND EXISTS (SELECT 1 FROM seed.words s
+                          WHERE s.id = words.id AND s.meaning_zh IS NOT NULL AND s.meaning_zh != '')
+        """)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -171,6 +261,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "zh_source" not in _column_names(conn, "words"):
         conn.execute("ALTER TABLE words ADD COLUMN zh_source TEXT")
     _migrate_fsrs_columns(conn)
+    _import_books(conn)
+    _backfill_zh(conn)
 
 
 def init_db(data_dir: str | None = None) -> str:

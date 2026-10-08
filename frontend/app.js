@@ -496,9 +496,135 @@ function greeting() {
   return '晚上好';
 }
 
+/* ---------------- 岛屿养成 ----------------
+   和风小岛 SVG，随等级生长：
+   Lv1 沙洲 → Lv2 小岛 → Lv3 绿岛 → Lv4 樱花岛 → Lv5 日语之岛 */
+var __islandUid = 0;
+function islandSvg(level) {
+  level = Math.max(1, Math.min(5, level || 1));
+  var uid = 'isl' + (++__islandUid);
+  var W = 320, H = 190;
+  var s = '';
+  s += '<svg viewBox="0 0 ' + W + ' ' + H + '" class="island-svg" role="img" aria-label="我的岛屿">';
+  s += '<defs>' +
+    '<linearGradient id="' + uid + 'sky" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#DCEBF3"/><stop offset="1" stop-color="#FDF8EE"/></linearGradient>' +
+    '<linearGradient id="' + uid + 'sea" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#A9D0E6"/><stop offset="1" stop-color="#7FB3D5"/></linearGradient>' +
+    '<radialGradient id="' + uid + 'sand" cx="0.5" cy="0.4" r="0.8">' +
+      '<stop offset="0" stop-color="#F7EACD"/><stop offset="1" stop-color="#EBD3A8"/></radialGradient>' +
+    '</defs>';
+  // 天空与海
+  s += '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="url(#' + uid + 'sky)"/>';
+  if (level >= 5) {
+    s += '<circle cx="268" cy="34" r="20" fill="#F6D38B" opacity="0.9"/>' +
+         '<circle cx="268" cy="34" r="27" fill="#F6D38B" opacity="0.25"/>';
+  }
+  // 远山（Lv3+）
+  if (level >= 3) {
+    s += '<path d="M0 118 Q60 84 120 112 T320 106 L320 190 L0 190 Z" fill="#B9CFDD" opacity="0.55"/>';
+  }
+  // 海
+  s += '<rect x="0" y="118" width="' + W + '" height="' + (H - 118) + '" fill="url(#' + uid + 'sea)"/>';
+  // 波纹
+  var waves = [[40, 138], [120, 150], [210, 140], [280, 154], [80, 168], [190, 172], [260, 130]];
+  waves.forEach(function (w, i) {
+    if (i > level + 3) return;
+    s += '<path d="M' + (w[0] - 16) + ' ' + w[1] + ' q8 -6 16 0 t16 0" stroke="#FFFFFF" ' +
+         'stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.65"/>';
+  });
+  // 岛体（随等级变大）
+  var iw = [150, 190, 230, 260, 285][level - 1];
+  var ih = [26, 34, 44, 54, 62][level - 1];
+  var cx = W / 2, baseY = 148;
+  s += '<ellipse cx="' + cx + '" cy="' + baseY + '" rx="' + (iw / 2) + '" ry="' + ih + '" fill="url(#' + uid + 'sand)"/>';
+  s += '<ellipse cx="' + cx + '" cy="' + (baseY - ih + 6) + '" rx="' + (iw / 2 - 14) + '" ry="' + (ih - 8) + '" fill="#F7EACD" opacity="0.7"/>';
+  var topY = baseY - ih * 2 + 10;
+  // 绿丘（Lv2+）
+  if (level >= 2) {
+    var hw = [0, 120, 160, 190, 210][level - 1];
+    s += '<ellipse cx="' + cx + '" cy="' + (baseY - 14) + '" rx="' + (hw / 2) + '" ry="30" fill="#8FB46A"/>';
+    s += '<ellipse cx="' + (cx - 20) + '" cy="' + (baseY - 22) + '" rx="' + (hw / 2 - 30) + '" ry="22" fill="#A3C47E" opacity="0.8"/>';
+  }
+  function tree(x, y, r, sakura) {
+    var t = '<rect x="' + (x - 3) + '" y="' + y + '" width="6" height="16" rx="2" fill="#8A6B4F"/>';
+    var c1 = sakura ? '#F6C9D4' : '#7BA05B', c2 = sakura ? '#EFA8BC' : '#5E8447';
+    t += '<circle cx="' + x + '" cy="' + (y - 8) + '" r="' + r + '" fill="' + c1 + '"/>';
+    t += '<circle cx="' + (x - r * 0.5) + '" cy="' + (y - 14) + '" r="' + (r * 0.6) + '" fill="' + c2 + '" opacity="0.85"/>';
+    if (sakura) {
+      t += '<circle cx="' + (x + r * 0.4) + '" cy="' + (y - 4) + '" r="2.4" fill="#F9DEE6"/>' +
+           '<circle cx="' + (x - r * 0.2) + '" cy="' + (y - 18) + '" r="2" fill="#F9DEE6"/>';
+    }
+    return t;
+  }
+  // 树（Lv2+ 普通树，Lv4+ 樱花）
+  if (level >= 2) {
+    var sakura = level >= 4;
+    s += tree(cx - 52, baseY - 44, 17, sakura && level >= 4);
+    s += tree(cx + 48, baseY - 40, 14, false);
+  }
+  if (level >= 3) s += tree(cx + 8, baseY - 52, 19, false);
+  if (level >= 4) {
+    s += tree(cx - 90, baseY - 36, 15, true);
+    s += tree(cx + 92, baseY - 42, 18, true);
+    // 飘落花瓣
+    [[cx - 30, 60], [cx + 40, 48], [cx + 70, 78], [cx - 70, 84]].forEach(function (p) {
+      s += '<ellipse cx="' + p[0] + '" cy="' + p[1] + '" rx="4" ry="2.6" fill="#F6C9D4" opacity="0.8" transform="rotate(24 ' + p[0] + ' ' + p[1] + ')"/>';
+    });
+  }
+  // 鸟居（Lv4+）
+  if (level >= 4) {
+    var tx = cx - 8, ty = baseY - 46;
+    s += '<rect x="' + (tx - 4) + '" y="' + ty + '" width="8" height="34" fill="#E03E2D"/>' +
+         '<rect x="' + (tx + 26) + '" y="' + ty + '" width="8" height="34" fill="#E03E2D"/>' +
+         '<rect x="' + (tx - 14) + '" y="' + (ty - 10) + '" width="62" height="9" rx="2" fill="#C93324"/>' +
+         '<rect x="' + (tx - 6) + '" y="' + (ty + 6) + '" width="46" height="6" rx="2" fill="#C93324"/>';
+  }
+  // 小屋（Lv5）
+  if (level >= 5) {
+    var hx = cx + 52, hy = baseY - 40;
+    s += '<rect x="' + (hx - 22) + '" y="' + hy + '" width="44" height="28" rx="2" fill="#F5EFE2"/>' +
+         '<path d="M' + (hx - 28) + ' ' + hy + ' L' + hx + ' ' + (hy - 20) + ' L' + (hx + 28) + ' ' + hy + ' Z" fill="#5E6E7E"/>' +
+         '<rect x="' + (hx - 7) + '" y="' + (hy + 10) + '" width="14" height="18" fill="#8A6B4F"/>' +
+         tree(hx - 52, hy + 6, 16, true);
+  }
+  // 飞鸟
+  if (level >= 2) {
+    s += '<path d="M52 44 q7 -7 14 0 q7 -7 14 0" stroke="#5E6E7E" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7"/>';
+  }
+  if (level >= 4) {
+    s += '<path d="M92 30 q6 -6 12 0 q6 -6 12 0" stroke="#5E6E7E" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>';
+  }
+  s += '</svg>';
+  return s;
+}
+
+/* 岛屿卡片 HTML */
+function islandCardHtml(isl) {
+  var pct = Math.round((isl.progress || 0) * 100);
+  var nextTxt = isl.is_max
+    ? '已抵达最高等级 · 日语之岛建成！'
+    : '距「' + esc(isl.next_level_name) + '」还差 ' +
+      (isl.streak < isl.next_streak ? (isl.next_streak - isl.streak) + ' 天打卡' : '') +
+      (isl.streak < isl.next_streak && isl.total_words < isl.next_words ? ' / ' : '') +
+      (isl.total_words < isl.next_words ? (isl.next_words - isl.total_words) + ' 词' : '');
+  return '<div class="glass island-card">' +
+    '<div class="island-head"><h3>我的岛屿</h3>' +
+    '<span class="island-lv">Lv.' + isl.level + ' · ' + esc(isl.level_name) + '</span></div>' +
+    islandSvg(isl.level) +
+    '<div class="island-progress"><div class="island-bar"><i style="width:' + pct + '%"></i></div>' +
+    '<p class="muted island-next">' + esc(nextTxt) + '</p></div>' +
+  '</div>';
+}
+
 function renderHome() {
   app.innerHTML = loadingHtml('正在眺望你的岛屿…');
-  api('/home/summary').then(function (d) {
+  Promise.all([
+    api('/home/summary'),
+    api('/island').catch(function () { return null; })
+  ]).then(function (res) {
+    var d = res[0] || {};
+    var isl = res[1];
     var username = d.username || localStorage.getItem('yuyu_username') || '';
     var learned = d.today_learned || 0;
     var goal = d.daily_goal || 30;
@@ -511,6 +637,8 @@ function renderHome() {
     app.innerHTML =
       '<div class="greet"><h2>' + esc(greeting()) + '，' + esc(username) + '</h2>' +
       '<p>今天也要为小岛添一块砖。</p></div>' +
+
+      (isl ? islandCardHtml(isl) : '') +
 
       '<div class="glass progress-ring-card">' +
         '<div class="ring-wrap">' +
@@ -557,8 +685,22 @@ function renderHome() {
       cb.disabled = true; cb.textContent = '打卡中…';
       api('/checkin', 'POST').then(function (r) {
         celebrate();
-        toast('打卡成功，连续 ' + (r.streak != null ? r.streak : streak + 1) + ' 天');
-        renderHome();
+        var newStreak = (r.streak != null ? r.streak : streak + 1);
+        toast('打卡成功，连续 ' + newStreak + ' 天');
+        // 拉岛屿与今日数据，生成打卡海报
+        Promise.all([
+          api('/island').catch(function () { return null; }),
+          api('/home/summary').catch(function () { return null; })
+        ]).then(function (res) {
+          renderHome();
+          showPoster({
+            streak: newStreak,
+            todayLearned: (res[1] && res[1].today_learned) || learned,
+            totalWords: (res[0] && res[0].total_words) || 0,
+            islandLevel: (res[0] && res[0].level) || 1,
+            islandName: (res[0] && res[0].level_name) || '沙洲'
+          });
+        });
       }).catch(function (err) {
         toast(err.message || '打卡失败');
         cb.disabled = false; cb.textContent = '打卡今日学习';
@@ -569,6 +711,142 @@ function renderHome() {
       '<br><br><button class="btn btn-ghost" onclick="location.reload()">重试</button></div>';
   });
 }
+/* ---------------- 打卡海报 ----------------
+   Canvas 绘制 750x1200 海报：日期、今日学词、连续打卡、岛屿等级、slogan */
+function showPoster(d) {
+  var ov = document.createElement('div');
+  ov.className = 'poster-overlay';
+  ov.innerHTML =
+    '<div class="poster-box glass">' +
+      '<canvas id="poster-canvas" width="750" height="1200"></canvas>' +
+      '<div class="poster-actions">' +
+        '<button class="btn btn-primary" id="poster-save">保存图片</button>' +
+        '<button class="btn btn-ghost" id="poster-close">关闭</button>' +
+      '</div>' +
+      '<p class="muted poster-tip">也可以长按海报保存到相册</p>' +
+    '</div>';
+  document.body.appendChild(ov);
+  drawPoster($('#poster-canvas'), d);
+  $('#poster-close').addEventListener('click', function () { document.body.removeChild(ov); });
+  ov.addEventListener('click', function (e) { if (e.target === ov) document.body.removeChild(ov); });
+  $('#poster-save').addEventListener('click', function () {
+    var a = document.createElement('a');
+    a.download = '语屿打卡_' + new Date().toISOString().slice(0, 10) + '.png';
+    a.href = $('#poster-canvas').toDataURL('image/png');
+    a.click();
+    toast('海报已保存');
+  });
+}
+
+function drawPoster(cv, d) {
+  var ctx = cv.getContext('2d');
+  var W = 750, H = 1200;
+  var F = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
+  // 纸底
+  var bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#FAF6EF'); bg.addColorStop(1, '#F0E5CF');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  // 顶部朱红细线
+  ctx.fillStyle = '#E03E2D'; ctx.fillRect(0, 0, W, 10);
+  ctx.textAlign = 'center';
+  // 品牌
+  ctx.fillStyle = '#2B2B2B';
+  ctx.font = '600 44px ' + F;
+  ctx.fillText('语 屿', W / 2, 110);
+  ctx.font = '400 26px ' + F;
+  ctx.fillStyle = '#8A8A8A';
+  ctx.fillText('K O T O B A', W / 2, 152);
+  // 日期
+  var now = new Date();
+  var week = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  ctx.font = '400 30px ' + F;
+  ctx.fillStyle = '#8A8A8A';
+  ctx.fillText(now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 星期' + week, W / 2, 210);
+  // 主数字：连续打卡
+  ctx.fillStyle = '#E03E2D';
+  ctx.font = '800 150px ' + F;
+  ctx.fillText(String(d.streak), W / 2, 380);
+  ctx.fillStyle = '#2B2B2B';
+  ctx.font = '500 40px ' + F;
+  ctx.fillText('天连续打卡', W / 2, 445);
+  // 三栏数据
+  var stats = [
+    [String(d.todayLearned), '今日学词'],
+    [String(d.totalWords), '累计学词'],
+    ['Lv.' + d.islandLevel, d.islandName],
+  ];
+  ctx.font = '700 52px ' + F;
+  stats.forEach(function (st, i) {
+    var x = W * (0.2 + i * 0.3);
+    ctx.fillStyle = '#274C77';
+    ctx.fillText(st[0], x, 560);
+    ctx.fillStyle = '#8A8A8A';
+    ctx.font = '400 28px ' + F;
+    ctx.fillText(st[1], x, 605);
+    ctx.font = '700 52px ' + F;
+  });
+  // 迷你岛屿
+  drawMiniIsland(ctx, W / 2, 800, d.islandLevel);
+  // slogan
+  ctx.fillStyle = '#2B2B2B';
+  ctx.font = '500 34px ' + F;
+  ctx.fillText('每天十五分钟，筑一座日语之岛。', W / 2, 1010);
+  // 底部
+  ctx.fillStyle = '#B0A890';
+  ctx.font = '400 26px ' + F;
+  ctx.fillText('语屿 KOTOBA · 日语背词', W / 2, 1130);
+  ctx.fillStyle = '#E03E2D'; ctx.fillRect(0, H - 10, W, 10);
+}
+
+function drawMiniIsland(ctx, cx, cy, level) {
+  level = Math.max(1, Math.min(5, level || 1));
+  // 海
+  ctx.fillStyle = '#9CC8E0';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 40, 200, 46, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  [[-120, 30], [-40, 55], [60, 32], [130, 58]].forEach(function (w) {
+    ctx.beginPath();
+    ctx.moveTo(cx + w[0] - 26, cy + w[1]);
+    ctx.quadraticCurveTo(cx + w[0], cy + w[1] - 12, cx + w[0] + 26, cy + w[1]);
+    ctx.stroke();
+  });
+  // 沙岛
+  ctx.fillStyle = '#F2E3C6';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 30, 120 + level * 12, 34, 0, 0, Math.PI * 2); ctx.fill();
+  // 绿丘
+  if (level >= 2) {
+    ctx.fillStyle = '#8FB46A';
+    ctx.beginPath(); ctx.ellipse(cx, cy + 8, 70 + level * 8, 30, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  function miniTree(x, y, sakura) {
+    ctx.fillStyle = '#8A6B4F'; ctx.fillRect(x - 4, y, 8, 22);
+    ctx.fillStyle = sakura ? '#F6C9D4' : '#7BA05B';
+    ctx.beginPath(); ctx.arc(x, y - 12, 26, 0, Math.PI * 2); ctx.fill();
+    if (sakura) {
+      ctx.fillStyle = '#EFA8BC';
+      ctx.beginPath(); ctx.arc(x - 12, y - 20, 14, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  if (level >= 2) miniTree(cx - 50, cy - 6, level >= 4);
+  if (level >= 3) miniTree(cx + 40, cy - 12, false);
+  if (level >= 4) miniTree(cx + 95, cy, true);
+  // 鸟居
+  if (level >= 4) {
+    ctx.fillStyle = '#E03E2D';
+    ctx.fillRect(cx - 22, cy - 34, 10, 40);
+    ctx.fillRect(cx + 12, cy - 34, 10, 40);
+    ctx.fillRect(cx - 34, cy - 46, 68, 12);
+  }
+  // 小屋
+  if (level >= 5) {
+    ctx.fillStyle = '#F5EFE2'; ctx.fillRect(cx + 48, cy - 22, 56, 34);
+    ctx.fillStyle = '#5E6E7E';
+    ctx.beginPath();
+    ctx.moveTo(cx + 42, cy - 22); ctx.lineTo(cx + 76, cy - 44); ctx.lineTo(cx + 110, cy - 22);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
 routes['home'] = renderHome;
 
 /* ================= 8. 页面：学习 ================= */
@@ -582,9 +860,14 @@ var TYPE_LABEL = {
 
 var ST = null; // 学习会话状态
 
-/* 书架：学习方式上下文（选书弹窗写入，plan 调用使用；默认 N5/seq） */
-var StudyCtx = { level: 'N5', order: 'seq' };
-var SHELF_LEVELS = ['N5', 'N4', 'N3', 'N2', 'N1'];
+/* 书架：学习方式上下文（选书弹窗写入，plan 调用使用） */
+var StudyCtx = { bookId: 'level-n5', bookName: 'N5 标准词', order: 'seq' };
+var SHELF_CATS = [
+  { key: 'level', title: '考级' },
+  { key: 'freq', title: '高频' },
+  { key: 'scene', title: '场景' },
+  { key: 'textbook', title: '教材' },
+];
 
 /* #/study 入口：书架 */
 function renderStudy() {
@@ -596,13 +879,22 @@ function renderStudy() {
   });
 }
 
-/* 书架渲染：N5–N1 竖排玻璃书脊卡片（level、x/总数、进度条） */
+/* 书架渲染：按维度分组的玻璃书卡（名称、x/总数、进度条） */
 function renderShelf(books) {
-  var byLevel = {};
-  (books || []).forEach(function (b) { if (b && b.level) byLevel[b.level] = b; });
   var hasData = !!books;
-  var cards = SHELF_LEVELS.map(function (lv) {
-    var b = byLevel[lv] || {};
+  var list = books || [
+    { id: 'level-n5', name: 'N5', category: 'level', level: 'N5' },
+    { id: 'level-n4', name: 'N4', category: 'level', level: 'N4' },
+    { id: 'level-n3', name: 'N3', category: 'level', level: 'N3' },
+    { id: 'level-n2', name: 'N2', category: 'level', level: 'N2' },
+    { id: 'level-n1', name: 'N1', category: 'level', level: 'N1' },
+  ];
+  var groups = SHELF_CATS.map(function (c) {
+    return { key: c.key, title: c.title,
+             books: list.filter(function (b) { return (b.category || 'level') === c.key; }) };
+  }).filter(function (g) { return g.books.length > 0; });
+
+  function cardHtml(b) {
     var pct = 0;
     if (typeof b.progress === 'number') pct = b.progress;
     else if (b.total > 0) pct = (b.studied || 0) / b.total;
@@ -610,28 +902,34 @@ function renderShelf(books) {
     var countTxt = hasData
       ? ((b.studied != null ? b.studied : 0) + ' / ' + (b.total != null ? b.total : '—'))
       : '— / —';
-    return '<button class="book glass' + (StudyCtx.level === lv ? ' current' : '') + '" data-lv="' + lv + '">' +
-      '<span class="book-lv">' + lv + '</span>' +
+    return '<button class="book glass' + (StudyCtx.bookId === b.id ? ' current' : '') + '" data-bid="' + esc(b.id) + '" data-bname="' + esc(b.name) + '">' +
+      '<span class="book-lv">' + esc(b.name) + '</span>' +
+      (b.description ? '<span class="book-desc">' + esc(b.description) + '</span>' : '') +
       '<span class="book-count">' + esc(countTxt) + '</span>' +
       '<span class="vbar"><i style="height:' + Math.round(pct * 100) + '%"></i></span>' +
       '<span class="book-pct">' + Math.round(pct * 100) + '%</span>' +
     '</button>';
-  }).join('');
+  }
 
-  app.innerHTML =
-    '<h2 class="page-title">书架</h2>' +
-    '<p class="page-sub">选一本书，开始今日的筑岛之旅。</p>' +
-    '<div class="shelf">' + cards + '</div>' +
-    '<div class="shelf-note muted">顺序学习按假名稳步推进 · 打乱顺序随机出词</div>';
+  var html = '<h2 class="page-title">书架</h2>' +
+    '<p class="page-sub">选一本书，开始今日的筑岛之旅。</p>';
+  groups.forEach(function (g) {
+    html += '<h3 class="shelf-cat">' + esc(g.title) + '</h3>' +
+      '<div class="shelf">' + g.books.map(cardHtml).join('') + '</div>';
+  });
+  html += '<div class="shelf-note muted">顺序学习按书内顺序稳步推进 · 打乱顺序随机出词</div>';
+  app.innerHTML = html;
 
   if (!hasData) toast('书架数据暂不可用，可直接选书开始');
   $$('.book').forEach(function (el) {
     el.addEventListener('click', function () {
-      var lv = el.getAttribute('data-lv');
+      var bid = el.getAttribute('data-bid');
+      var bname = el.getAttribute('data-bname');
       vibrate(10);
-      chooseOrder(lv).then(function (order) {
+      chooseOrder(bname).then(function (order) {
         if (!order) return;
-        StudyCtx.level = lv;
+        StudyCtx.bookId = bid;
+        StudyCtx.bookName = bname;
         StudyCtx.order = order;
         startStudyFlow();
       });
@@ -640,13 +938,13 @@ function renderShelf(books) {
 }
 
 /* 选书弹窗：[顺序学习] [打乱顺序] */
-function chooseOrder(lv) {
+function chooseOrder(bookName) {
   return new Promise(function (resolve) {
     var m = $('#modal');
     var acts = $('.modal-actions');
     var orig = acts.innerHTML; // 恢复 confirmModal 的默认按钮
-    $('#modal-title').textContent = lv + ' · 怎么学？';
-    $('#modal-desc').textContent = '顺序学习按假名顺序稳步推进；打乱顺序随机出词，更具挑战。';
+    $('#modal-title').textContent = bookName + ' · 怎么学？';
+    $('#modal-desc').textContent = '顺序学习按书内顺序稳步推进；打乱顺序随机出词，更具挑战。';
     acts.innerHTML = '<button class="btn btn-indigo" id="m-seq">顺序学习</button>' +
       '<button class="btn btn-primary" id="m-shuffle">打乱顺序</button>';
     m.classList.remove('hidden');
@@ -665,11 +963,11 @@ function chooseOrder(lv) {
 /* 按 StudyCtx 拉取学习计划，进入背词流 */
 function startStudyFlow() {
   app.innerHTML = loadingHtml('正在准备今日新词…');
-  api('/study/plan', 'POST', { level: StudyCtx.level, order: StudyCtx.order }).then(function (d) {
+  api('/study/plan', 'POST', { book_id: StudyCtx.bookId, order: StudyCtx.order }).then(function (d) {
     var words = d.words || [];
     if (!words.length) {
       app.innerHTML = '<div class="empty-state">' + sakuraArt(110) +
-        '<h3>' + esc(StudyCtx.level) + ' 今日新词已学完</h3><p>换本书看看，或去复习巩固一下吧。</p>' +
+        '<h3>' + esc(StudyCtx.bookName || '本书') + ' 今日新词已学完</h3><p>换本书看看，或去复习巩固一下吧。</p>' +
         '<br><a href="#/review" class="btn btn-primary" style="text-decoration:none">去复习</a>' +
         '<div style="height:10px"></div>' +
         '<button class="btn btn-ghost" id="back-shelf">返回书架</button></div>';
