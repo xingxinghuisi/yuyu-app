@@ -277,15 +277,60 @@ function stopAmbientPetals() {
 }
 
 /* ================= 3. 日语 TTS ================= */
+/* 发音偏好：localStorage 持久化 */
+function getVoicePref() {
+  try {
+    return {
+      voice: localStorage.getItem('yuyu_voice') || '',
+      rate: parseFloat(localStorage.getItem('yuyu_rate') || '0.8')
+    };
+  } catch (e) { return { voice: '', rate: 0.8 }; }
+}
 function speak(text) {
   try {
     if (!('speechSynthesis' in window) || !text) return;
     window.speechSynthesis.cancel();
     var u = new SpeechSynthesisUtterance(text);
     u.lang = 'ja-JP';
-    u.rate = 0.9;
+    var pref = getVoicePref();
+    u.rate = pref.rate || 0.8;
+    if (pref.voice) {
+      var vs = window.speechSynthesis.getVoices();
+      for (var i = 0; i < vs.length; i++) {
+        if (vs[i].voiceURI === pref.voice || vs[i].name === pref.voice) { u.voice = vs[i]; break; }
+      }
+    }
     window.speechSynthesis.speak(u);
   } catch (e) { /* 忽略 */ }
+}
+/* 初始化发音设置 UI（我的页） */
+function initVoiceSettings() {
+  var sel = $('#sel-voice'), range = $('#range-rate'), rval = $('#rate-val'), test = $('#btn-voice-test');
+  if (!sel || !('speechSynthesis' in window)) return;
+  var pref = getVoicePref();
+  var fill = function () {
+    var vs = window.speechSynthesis.getVoices().filter(function (v) {
+      return (v.lang || '').toLowerCase().indexOf('ja') === 0;
+    });
+    sel.innerHTML = '<option value="">系统默认</option>' + vs.map(function (v) {
+      var n = v.name + (v.lang ? ' (' + v.lang + ')' : '');
+      return '<option value="' + esc(v.name) + '"' + (pref.voice === v.name || pref.voice === v.voiceURI ? ' selected' : '') + '>' + esc(n) + '</option>';
+    }).join('');
+  };
+  fill();
+  if (window.speechSynthesis.onvoiceschanged !== undefined) window.speechSynthesis.onvoiceschanged = fill;
+  if (range) {
+    range.value = pref.rate;
+    if (rval) rval.textContent = 'x' + pref.rate.toFixed(1);
+    range.addEventListener('input', function () {
+      try { localStorage.setItem('yuyu_rate', range.value); } catch (e) {}
+      if (rval) rval.textContent = 'x' + parseFloat(range.value).toFixed(1);
+    });
+  }
+  sel.addEventListener('change', function () {
+    try { localStorage.setItem('yuyu_voice', sel.value); } catch (e) {}
+  });
+  if (test) test.addEventListener('click', function () { speak('こんにちは、語屿です'); });
 }
 
 /* ================= 4. API 封装 ================= */
@@ -1911,6 +1956,16 @@ function renderMe() {
     '</div>' +
 
     '<div class="glass about-card">' +
+      '<h3>发音设置</h3>' +
+      '<div style="margin-bottom:10px"><label class="muted" style="font-size:13px">发音人</label>' +
+      '<select id="sel-voice" class="input" style="width:100%;margin-top:4px"><option value="">系统默认</option></select></div>' +
+      '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span></label>' +
+      '<input type="range" id="range-rate" min="0.5" max="1.2" step="0.1" value="0.8" style="width:100%">' +
+      '<div style="display:flex;justify-content:space-between;font-size:11px" class="muted"><span>慢</span><span>快</span></div></div>' +
+      '<button class="btn btn-ghost btn-sm" id="btn-voice-test" style="margin-top:8px">试听</button>' +
+    '</div>' +
+
+    '<div class="glass about-card">' +
       '<h3>关于数据</h3>' +
       '词库来源：OpenJLPT、JMdict-EDICT，例句来自 Tatoeba。<br>' +
       '以上数据均以 CC BY-SA 4.0 协议共享，版权归各自贡献者所有。<br>' +
@@ -2018,6 +2073,7 @@ function renderMe() {
       if (yes) { toast('已退出登录'); logout(); }
     });
   });
+  initVoiceSettings();
   // 手动检查更新：强制刷新 SW，发现新版走热更新流程
   var cbu = $('#btn-check-update');
   if (cbu) cbu.addEventListener('click', function () {
