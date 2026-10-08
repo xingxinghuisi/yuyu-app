@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '0.5.0';
+var APP_VERSION = '0.5.1';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -1140,7 +1140,7 @@ function renderStudyWord() {
   var bb = $('#btn-back');
   if (bb) bb.addEventListener('click', function () { if (ST.idx > 0) { ST.idx--; renderStudyWord(); } });
   var exb = $('#btn-exit');
-  if (exb) exb.addEventListener('click', function () { ST = null; location.hash = '#/study'; });
+  if (exb) exb.addEventListener('click', function () { ST = null; if (location.hash !== '#/study') location.hash = '#/study'; navigate(); });
   var fw = $('#btn-fwd');
   if (fw) fw.addEventListener('click', function () { ST.idx++; renderStudyWord(); });
   if (!history) {
@@ -1393,7 +1393,7 @@ function renderReviewCard() {
   var rb = $('#btn-rv-back');
   if (rb) rb.addEventListener('click', function () { if (RV.idx > 0) { RV.idx--; renderReviewCard(); } });
   var rvex = $('#btn-rv-exit');
-  if (rvex) rvex.addEventListener('click', function () { RV = null; location.hash = '#/study'; });
+  if (rvex) rvex.addEventListener('click', function () { RV = null; if (location.hash !== '#/study') location.hash = '#/study'; navigate(); });
   var fw = $('#btn-rv-fwd');
   if (fw) fw.addEventListener('click', function () { RV.idx++; renderReviewCard(); });
 
