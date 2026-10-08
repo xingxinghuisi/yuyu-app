@@ -152,9 +152,9 @@ def main():
 
     # 7. quiz/start count=5, answer all correctly via /api/vocab/{id}
     s, quiz = api("POST", "/api/quiz/start", {"level": "N5", "count": 5}, token=token)
-    step("quiz/start 5", s == 200 and len(quiz) == 5, f"{s} {quiz if s != 200 else ''}")
+    step("quiz/start 5", s == 200 and len(quiz.get("questions", [])) == 5, f"{s} {quiz if s != 200 else ''}")
     answers = []
-    for q in quiz:
+    for q in quiz["questions"]:
         s, w = api("GET", f"/api/vocab/{q['word_id']}", token=token)
         if s != 200:
             step("quiz correct submit", False, f"vocab fetch {s}")
@@ -166,12 +166,15 @@ def main():
 
     # 8. quiz again, answer all wrong
     s, quiz2 = api("POST", "/api/quiz/start", {"level": "N5", "count": 5}, token=token)
-    bad_answers = [{"qid": q["qid"], "answer": "__definitely_wrong__"} for q in quiz2]
+    bad_answers = [{"qid": q["qid"], "answer": "__definitely_wrong__"} for q in quiz2["questions"]]
     s, res2 = api("POST", "/api/quiz/submit", {"qid_answers": bad_answers}, token=token)
     step("quiz/submit wrong score==0", s == 200 and res2.get("score") == 0, f"{s} {res2}")
     step("quiz/submit wrong non-empty", s == 200 and len(res2.get("wrong", [])) == 5,
          f"{s} {res2}")
-    wrong_ids = set(res2.get("wrong", []))
+    step("quiz/submit wrong rich items", s == 200 and all(
+        w.get("word_id") and w.get("word") and w.get("meaning") for w in res2.get("wrong", [])),
+         f"{s} {res2.get('wrong')}")
+    wrong_ids = set(w["word_id"] for w in res2.get("wrong", []))
 
     # 9. wrong words should be in review queue
     s, due2 = api("GET", "/api/review/due?limit=100", token=token)
@@ -282,8 +285,8 @@ def main():
     s, v3 = api("GET", "/api/vocab?level=N5&limit=3&offset=200", token=token)
     ids3 = [w["id"] for w in v3]
     s, qz = api("POST", "/api/quiz/start", {"word_ids": ids3, "count": 5}, token=token)
-    step("quiz word_ids scoped", s == 200 and len(qz) == 3
-         and all(q["word_id"] in ids3 for q in qz), f"{s} {len(qz) if s == 200 else qz}")
+    step("quiz word_ids scoped", s == 200 and len(qz.get("questions", [])) == 3
+         and all(q["word_id"] in ids3 for q in qz["questions"]), f"{s} {len(qz) if s == 200 else qz}")
     s, qz_empty = api("POST", "/api/quiz/start", {"word_ids": []}, token=token)
     step("quiz word_ids empty 400", s == 400, f"{s} {qz_empty}")
 
@@ -306,10 +309,10 @@ def main():
 
     # 21. 无打字题型: quiz/start 多题中不应出现 spelling, 且 listening 为听音选义
     s, qbig = api("POST", "/api/quiz/start", {"level": "N5", "count": 20}, token=token)
-    types = {q["type"] for q in qbig} if s == 200 else set()
+    types = {q["type"] for q in qbig.get("questions", [])} if s == 200 else set()
     step("quiz no spelling type", s == 200 and "spelling" not in types
          and types <= {"choice_ja", "choice_zh", "listening"}, f"{s} {types}")
-    lqs = [q for q in qbig if q["type"] == "listening"] if s == 200 else []
+    lqs = [q for q in qbig.get("questions", []) if q["type"] == "listening"] if s == 200 else []
     step("quiz listening has questions", len(lqs) > 0, f"{len(lqs)}")
     lok = True
     for q in lqs:
