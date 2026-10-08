@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#E03E2D">
+<title>语屿 Kotoba · 每天十五分钟，筑一座日语之岛</title>
+<meta name="description" content="语屿 Kotoba — 面向 JLPT 考生的日语背单词应用。每天十五分钟，筑一座日语之岛。">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 樱花粒子画布（全屏） -->
+<canvas id="sakura-canvas" aria-hidden="true"></canvas>
+
+<!-- 顶部栏（玻璃，登录页隐藏） -->
+<header id="topbar" class="topbar hidden">
+  <div class="topbar-inner">
+    <div class="brand-mini"><span class="brand-mini-icon">屿</span><span class="brand-mini-name">语屿</span></div>
+    <button id="theme-toggle" class="icon-btn" aria-label="切换深浅色主题" title="切换深浅色">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- 页面容器 -->
+<main id="app" class="app"></main>
+
+<!-- 底部悬浮胶囊玻璃 Tab Bar -->
+<nav id="tabbar" class="tabbar hidden" aria-label="主导航">
+  <a class="tab" href="#/home" data-tabs="home,study" aria-label="学习">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
+    <span>学习</span>
+  </a>
+  <a class="tab" href="#/review" data-tabs="review" aria-label="复习">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+    <span>复习</span>
+  </a>
+  <a class="tab" href="#/quiz" data-tabs="quiz" aria-label="考试">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>
+    <span>考试</span>
+  </a>
+  <a class="tab" href="#/me" data-tabs="stats,me" aria-label="我的">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
+    <span>我的</span>
+  </a>
+</nav>
+
+<!-- 二次确认弹窗 -->
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-card glass">
+    <h3 id="modal-title">确认</h3>
+    <p id="modal-desc"></p>
+    <div class="modal-actions">
+      <button id="modal-cancel" class="btn btn-ghost">取消</button>
+      <button id="modal-ok" class="btn btn-danger">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- 轻提示 -->
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script src="app.js"></script>
+<script>
+// 注册 Service Worker（PWA 离线能力）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.warn('SW 注册失败:', e);
+    });
+  });
+}
+</script>
+</body>
+</html>
