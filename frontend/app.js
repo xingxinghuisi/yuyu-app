@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '0.4.3';
+var APP_VERSION = '0.5.0';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -925,11 +925,15 @@ function renderShelf(books, summary, isl) {
       ? ((b.studied != null ? b.studied : 0) + ' / ' + (b.total != null ? b.total : '—'))
       : '— / —';
     return '<button class="book glass' + (StudyCtx.bookId === b.id ? ' current' : '') + '" data-bid="' + esc(b.id) + '" data-bname="' + esc(b.name) + '">' +
-      '<span class="book-lv">' + esc(b.name) + '</span>' +
-      (b.description ? '<span class="book-desc">' + esc(b.description) + '</span>' : '') +
-      '<span class="book-count">' + esc(countTxt) + '</span>' +
-      '<span class="vbar"><i style="height:' + Math.round(pct * 100) + '%"></i></span>' +
-      '<span class="book-pct">' + Math.round(pct * 100) + '%</span>' +
+      '<div class="book-main">' +
+        '<span class="book-lv">' + esc(b.name) + '</span>' +
+        (b.description ? '<span class="book-desc">' + esc(b.description) + '</span>' : '') +
+      '</div>' +
+      '<div class="book-side">' +
+        '<span class="book-count">' + esc(countTxt) + '</span>' +
+        '<span class="book-bar"><i style="width:' + Math.round(pct * 100) + '%"></i></span>' +
+        '<span class="book-pct">' + Math.round(pct * 100) + '%</span>' +
+      '</div>' +
     '</button>';
   }
 
@@ -1071,11 +1075,11 @@ function wordCardHtml(w, showMeaning) {
   '</div>';
 }
 
-/* 答题前遮罩卡：看义选词 / 听发音选词时先隐藏单词，凭记忆作答 */
+/* 例句译文：英语在前、中文在后（日语句由调用方单独渲染）；无中文时只显示英文，不留空行 */
 function exTransHtml(ex) {
   var h = '';
-  if (ex.zh) h += '<div class="ex-zh">' + esc(ex.zh) + '</div>';
   if (ex.en) h += '<div class="ex-en">' + esc(ex.en) + '</div>';
+  if (ex.zh) h += '<div class="ex-zh">' + esc(ex.zh) + '</div>';
   if (!h) {
     var s = ex.display_sentence || '';
     if (s) h = '<div class="ex-zh">' + esc(s) + '</div>';
@@ -1107,6 +1111,7 @@ function renderStudyWord() {
     (ST.idx > 0
       ? '<button class="btn btn-ghost btn-sm" id="btn-back">← 上一词</button>'
       : '<span></span>') +
+    '<button class="btn btn-ghost btn-sm" id="btn-exit">✕ 结束</button>' +
     '</div>';
 
   var actions;
@@ -1134,6 +1139,8 @@ function renderStudyWord() {
   if (db) db.addEventListener('click', function () { openWordDetail(w.id); });
   var bb = $('#btn-back');
   if (bb) bb.addEventListener('click', function () { if (ST.idx > 0) { ST.idx--; renderStudyWord(); } });
+  var exb = $('#btn-exit');
+  if (exb) exb.addEventListener('click', function () { ST = null; location.hash = '#/study'; });
   var fw = $('#btn-fwd');
   if (fw) fw.addEventListener('click', function () { ST.idx++; renderStudyWord(); });
   if (!history) {
@@ -1224,6 +1231,7 @@ function renderMiniQ() {
   var total = MQ.questions.length;
   app.innerHTML =
     '<div class="mini-quiz-head"><span class="mini-quiz-tag">随堂小测</span>' +
+    '<button class="btn btn-ghost btn-sm" id="btn-mq-exit">✕ 结束</button>' +
     '<div class="quiz-progress"><div class="bar"><i style="width:' + Math.round(MQ.idx / total * 100) + '%"></i></div>' +
     '<div class="txt">第 ' + (MQ.idx + 1) + ' / ' + total + ' 题 · ' + (TYPE_LABEL[q.type] || '') + '</div></div></div>' +
     quizQBody(q) +
@@ -1231,6 +1239,8 @@ function renderMiniQ() {
     '<div id="q-next" class="hidden" style="margin-top:16px"><button class="btn btn-primary" id="btn-mq-next">' +
     (MQ.idx === total - 1 ? '交卷' : '下一题') + '</button></div>';
   bindMiniQ(q);
+  var mqe = $('#btn-mq-exit');
+  if (mqe) mqe.addEventListener('click', function () { MQ = null; renderStudyWord(); });
   $('#btn-mq-next').addEventListener('click', function () {
     if (MQ.idx === MQ.questions.length - 1) submitMiniQuiz();
     else { MQ.idx++; renderMiniQ(); }
@@ -1262,9 +1272,10 @@ function submitMiniQuiz() {
     var score = r.score || 0;
     var total = r.total || MQ.questions.length;
     var wrongIds = r.wrong || [];
-    // 错词回炉：逐个 POST /api/study/answer {grade: 0}
+    // 错词回炉：逐个 POST /api/study/answer {grade: 0}（wrong 可能是 word_id 字符串或详情对象）
     var chain = Promise.resolve();
-    wrongIds.forEach(function (wid) {
+    wrongIds.forEach(function (x) {
+      var wid = (typeof x === 'string') ? x : x.word_id;
       chain = chain.then(function () {
         return api('/study/answer', 'POST', { word_id: wid, grade: 0 }).catch(function () {});
       });
@@ -1339,6 +1350,7 @@ function renderReviewCard() {
     (RV.idx > 0
       ? '<button class="btn btn-ghost btn-sm" id="btn-rv-back">← 上一词</button>'
       : '<span></span>') +
+    '<button class="btn btn-ghost btn-sm" id="btn-rv-exit">✕ 结束</button>' +
     '</div>';
 
   var meaningBlock =
@@ -1380,6 +1392,8 @@ function renderReviewCard() {
   $('#btn-speak').addEventListener('click', function () { speak(w.kana); });
   var rb = $('#btn-rv-back');
   if (rb) rb.addEventListener('click', function () { if (RV.idx > 0) { RV.idx--; renderReviewCard(); } });
+  var rvex = $('#btn-rv-exit');
+  if (rvex) rvex.addEventListener('click', function () { RV = null; location.hash = '#/study'; });
   var fw = $('#btn-rv-fwd');
   if (fw) fw.addEventListener('click', function () { RV.idx++; renderReviewCard(); });
 
@@ -1504,15 +1518,17 @@ function openWordDetail(wordId) {
 
 /* ================= 10. 页面：模考 ================= */
 var QZ = null; // 模考会话
-var QUIZ_SECONDS = 600; // 20 题建议 10 分钟
+var QUIZ_COUNTS = [20, 30, 50];
+var QUIZ_SEC_PER_Q = 30; // 每题 30 秒
 
 function renderQuiz() {
-  // 设置页：级别选择 + 开始
+  // 设置页：级别 + 题量选择 + 开始
   var levels = ['N5', 'N4', 'N3', 'N2', 'N1'];
   var sel = QZ && QZ.level ? QZ.level : 'N5';
+  var selCount = QZ && QZ.count ? QZ.count : 20;
   app.innerHTML =
-    '<h2 class="page-title">考试专区</h2>' +
-    '<p class="page-sub">20 题 · 建议 10 分钟内完成</p>' +
+    '<h2 class="page-title">模拟考试</h2>' +
+    '<p class="page-sub">词汇专项 · 计时作答 · 交卷出成绩单</p>' +
     '<div class="glass panel" style="margin-top:16px">' +
       '<h3>选择级别</h3>' +
       '<div class="level-pills">' +
@@ -1520,35 +1536,59 @@ function renderQuiz() {
         return '<button class="level-pill' + (lv === sel ? ' active' : '') + '" data-lv="' + lv + '">' + lv + '</button>';
       }).join('') +
       '</div>' +
-      '<div class="muted" style="font-size:13px;margin-bottom:16px">题数固定 20 题，题型覆盖看词选义 / 看义选词 / 听音选义。</div>' +
+      '<h3 style="margin-top:18px">题量</h3>' +
+      '<div class="level-pills">' +
+      QUIZ_COUNTS.map(function (c) {
+        return '<button class="level-pill count-pill' + (c === selCount ? ' active' : '') + '" data-c="' + c + '">' + c + ' 题</button>';
+      }).join('') +
+      '</div>' +
+      '<div class="muted" id="quiz-desc" style="font-size:13px;margin-bottom:16px"></div>' +
       '<button class="btn btn-indigo" id="btn-quiz-start">开始模考</button>' +
     '</div>';
 
-  var level = sel;
-  $$('.level-pill').forEach(function (p) {
+  var level = sel, count = selCount;
+  var descEl = null;
+  function paintDesc() {
+    if (descEl) descEl.textContent = count + ' 题 · 限时 ' + Math.round(count * QUIZ_SEC_PER_Q / 60) + ' 分钟，题型覆盖看词选义 / 看义选词 / 听音选义。';
+  }
+  $$('.level-pill[data-lv]').forEach(function (p) {
     p.addEventListener('click', function () {
-      $$('.level-pill').forEach(function (x) { x.classList.remove('active'); });
+      $$('.level-pill[data-lv]').forEach(function (x) { x.classList.remove('active'); });
       p.classList.add('active');
       level = p.getAttribute('data-lv');
     });
   });
+  $$('.count-pill').forEach(function (p) {
+    p.addEventListener('click', function () {
+      $$('.count-pill').forEach(function (x) { x.classList.remove('active'); });
+      p.classList.add('active');
+      count = parseInt(p.getAttribute('data-c'), 10) || 20;
+      paintDesc();
+    });
+  });
+  descEl = $('#quiz-desc');
+  paintDesc();
   $('#btn-quiz-start').addEventListener('click', function () {
-    startQuiz(level);
+    startQuiz(level, count);
   });
 }
 
-function startQuiz(level) {
+function startQuiz(level, count) {
+  count = count || 20;
   app.innerHTML = loadingHtml('正在生成试卷…');
-  api('/quiz/start', 'POST', { level: level, count: 20 }).then(function (d) {
+  api('/quiz/start', 'POST', { level: level, count: count }).then(function (d) {
     var qs = d.questions || [];
     if (!qs.length) { toast('暂无题目'); renderQuiz(); return; }
+    var seconds = qs.length * QUIZ_SEC_PER_Q;
     QZ = {
       level: level,
-      quiz_id: d.quiz_id,
+      count: qs.length,
       questions: qs,
       idx: 0,
       answers: [],
-      left: QUIZ_SECONDS,
+      left: seconds,
+      totalSeconds: seconds,
+      startedAt: Date.now(),
       answered: false,
       done: false
     };
@@ -1584,11 +1624,13 @@ function renderQuizQ() {
   QZ.answered = false;
   var total = QZ.questions.length;
   var type = q.type;
+  var mm0 = Math.floor(QZ.left / 60), ss0 = QZ.left % 60;
 
   var head =
     '<div class="quiz-info"><span class="muted" style="font-size:13px">第 ' + (QZ.idx + 1) + ' / ' + total + ' 题 · ' +
     (TYPE_LABEL[type] || '') + '</span>' +
-    '<span class="timer" id="quiz-timer">10:00</span></div>' +
+    '<span><button class="btn btn-ghost btn-sm" id="btn-q-exit" style="margin-right:8px">✕ 放弃</button>' +
+    '<span class="timer" id="quiz-timer">' + (mm0 < 10 ? '0' : '') + mm0 + ':' + (ss0 < 10 ? '0' : '') + ss0 + '</span></span></div>' +
     '<div class="quiz-progress"><div class="bar"><i style="width:' +
     Math.round(QZ.idx / total * 100) + '%"></i></div></div>';
 
@@ -1620,6 +1662,12 @@ function renderQuizQ() {
     if (QZ.idx === QZ.questions.length - 1) submitQuiz();
     else { QZ.idx++; renderQuizQ(); }
   });
+  var qex = $('#btn-q-exit');
+  if (qex) qex.addEventListener('click', function () {
+    confirmModal('放弃模考', '确定放弃本次模考吗？已作答的不计分。', '放弃').then(function (yes) {
+      if (yes) { QZ = null; clearTimers(); renderQuiz(); }
+    });
+  });
 }
 
 function submitQuiz() {
@@ -1640,6 +1688,12 @@ function renderQuizResult(r) {
   var pct = total > 0 ? score / total : 0;
   var C = 2 * Math.PI * 54;
   var wrong = r.wrong || [];
+  // 用时：以 QZ.startedAt 为准；若无则用倒计时反推
+  var usedSec = 0;
+  if (QZ && QZ.startedAt) usedSec = Math.max(0, Math.round((Date.now() - QZ.startedAt) / 1000));
+  else if (QZ && QZ.totalSeconds != null) usedSec = Math.max(0, QZ.totalSeconds - (QZ.left || 0));
+  var um = Math.floor(usedSec / 60), us = usedSec % 60;
+  var timeTxt = (um > 0 ? um + '分' : '') + us + '秒';
   celebrate();
 
   app.innerHTML =
@@ -1654,6 +1708,7 @@ function renderQuizResult(r) {
       '</div>' +
       '<p class="muted" style="font-size:14px;margin:14px 0 0">' +
         (pct >= 0.9 ? '非常出色，小岛在发光。' : pct >= 0.6 ? '稳步前进，继续加油。' : '别灰心，错题是最好的砖。') + '</p>' +
+      '<div class="score-meta"><span>正确率 ' + Math.round(pct * 100) + '%</span><span>·</span><span>用时 ' + timeTxt + '</span></div>' +
     '</div>' +
 
     (wrong.length ?
