@@ -1,0 +1,12 @@
+services:
+  yuyu:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+    restart: unless-stopped
