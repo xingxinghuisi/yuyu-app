@@ -1128,3 +1128,36 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 .goal-stepper .btn { min-width: 44px; }
 .goal-val { font-size: 16px; }
 .goal-val b { font-size: 26px; }
+/* v0.8 生词本星标 */
+.star-btn {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; cursor: pointer;
+  font-size: 24px; line-height: 1; padding: 6px;
+  color: var(--ink-soft); opacity: .55; transition: transform .15s, opacity .15s, color .15s;
+}
+.star-btn.starred { color: #E8A93D; opacity: 1; }
+.star-btn:active { transform: scale(1.25); }
+.star-btn:disabled { opacity: .4; }
+.detail-star-wrap { position: absolute; top: 10px; right: 52px; }
+.detail-star-wrap .star-btn { position: static; }
+/* 生词本列表 */
+.starred-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.starred-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; text-decoration: none; color: inherit;
+  position: relative;
+}
+.starred-item .star-btn { position: static; flex: none; }
+.starred-item .sk { font-family: var(--font-jp); font-size: 18px; font-weight: 700; }
+.starred-item .sm { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+.starred-item .chev { margin-left: auto; color: var(--ink-soft); }
+.mastery-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mastery-0 { background: #C9C2B4; } .mastery-1 { background: var(--indigo); } .mastery-2 { background: var(--aka); }
+/* v0.8 学习统计 */
+.stats-nums { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 12px 0; text-align: center; }
+.stats-nums .num b { display: block; font-size: 26px; color: var(--ink); }
+.stats-nums .num span { font-size: 12px; color: var(--ink-soft); }
+.stats-nums .num .aka { color: var(--aka); }
+.stats-canvas { width: 100%; height: auto; display: block; margin-top: 8px; }
+.stats-legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+.stats-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; }
