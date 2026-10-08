@@ -83,7 +83,13 @@
   });
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').then(function (reg) {
-      if (reg && reg.update) reg.update();
+      if (!reg || !reg.update) return;
+      reg.update();
+      // 标签页一直开着时也要能热更新：每 60 秒查一次 + 切回前台时查
+      setInterval(function () { try { reg.update(); } catch (e) {} }, 60000);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { try { reg.update(); } catch (e) {} }
+      });
     }).catch(function (e) {
       console.warn('SW 注册失败:', e);
     });
