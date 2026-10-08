@@ -69,7 +69,7 @@ def _column_names(conn: sqlite3.Connection, table: str) -> set:
 _WORDS_COLS = ("id", "kanji", "kana", "romaji", "meaning_en", "meaning_zh", "pos",
                "level", "jmdict_id", "other_forms", "other_readings", "audio_url",
                "mnemonic_zh", "image_url", "source", "created_at", "updated_at",
-               "zh_source")
+               "zh_source", "exam_freq", "textbook", "lesson")
 _EXAMPLES_COLS = ("id", "word_id", "sentence_ja", "furigana", "sentence_en",
                   "sentence_zh", "zh_source", "tatoeba_id", "source")
 _KANJI_COLS = ("character", "level", "strokes", "onyomi", "kunyomi", "meanings",
@@ -97,7 +97,8 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
                 jmdict_id INTEGER, other_forms TEXT, other_readings TEXT,
                 audio_url TEXT, mnemonic_zh TEXT, image_url TEXT,
                 source TEXT NOT NULL DEFAULT 'openjlpt',
-                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, zh_source TEXT)""")
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, zh_source TEXT,
+                exam_freq TEXT, textbook TEXT, lesson TEXT)""")
             cols = _import_cols(_WORDS_COLS, _seed_col_names(conn, "words"))
             conn.execute(f"INSERT INTO words ({cols}) SELECT {cols} FROM seed.words")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_words_level ON words(level)")
@@ -154,11 +155,7 @@ def _import_books(conn: sqlite3.Connection) -> None:
     同一事务内 DROP 后重建同名表会导致后续跨库 INSERT 报 no such table (SQLite 特性)。
     """
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if "books" in tables and "book_words" in tables:
-        n = conn.execute("SELECT COUNT(*) FROM books").fetchone()[0]
-        m = conn.execute("SELECT COUNT(*) FROM book_words").fetchone()[0]
-        if n > 0 and m > 0:
-            return
+    # v0.6: 总是从种子库同步 books (INSERT OR REPLACE), 确保新书能到达老用户
     seed = find_seed_db()
     if seed is None:
         raise FileNotFoundError("seed db not found; cannot import books")
@@ -171,11 +168,15 @@ def _import_books(conn: sqlite3.Connection) -> None:
             conn.execute("""CREATE TABLE books (
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
                 level TEXT, description TEXT, sort_order INTEGER NOT NULL DEFAULT 0)""")
-        # books 为空 (旧种子场景) 时也要从新种子补上
-        if conn.execute("SELECT COUNT(*) FROM books").fetchone()[0] == 0:
-            if "books" in seed_tables:
-                cols = _import_cols(_BOOKS_COLS, _seed_col_names(conn, "books"))
-                conn.execute(f"INSERT INTO books ({cols}) SELECT {cols} FROM seed.books")
+        # books 从种子库 upsert (新书自动加入, 已有书更新元信息)
+        if "books" in seed_tables:
+            cols = _import_cols(_BOOKS_COLS, _seed_col_names(conn, "books"))
+            # 用 INSERT OR REPLACE 逐行同步 (避免列数不一致)
+            for r in conn.execute(f"SELECT {cols} FROM seed.books"):
+                placeholders = ",".join("?" * len(r))
+                # 构造 OR REPLACE
+                col_list = cols.split(",")
+                conn.execute(f"INSERT OR REPLACE INTO books ({cols}) VALUES ({placeholders})", tuple(r))
         # book_words 全量重建 (幂等: 清空后重插, 词书内容以种子库为准)
         conn.execute("""CREATE TABLE IF NOT EXISTS book_words (
             book_id TEXT NOT NULL, word_id TEXT NOT NULL, sort_order INTEGER NOT NULL,
@@ -185,6 +186,31 @@ def _import_books(conn: sqlite3.Connection) -> None:
             cols = _import_cols(_BOOK_WORDS_COLS, _seed_col_names(conn, "book_words"))
             conn.execute(f"INSERT INTO book_words ({cols}) SELECT {cols} FROM seed.book_words")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_book_words ON book_words(book_id, sort_order)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("DETACH seed")
+
+
+def _import_sample_questions(conn: sqlite3.Connection) -> None:
+    """v0.6: JEES 官方样题从种子库导入 (幂等, 全量重建)。"""
+    seed = find_seed_db()
+    if seed is None:
+        return
+    conn.commit()
+    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    try:
+        seed_tables = {r[0] for r in conn.execute(
+            "SELECT name FROM seed.sqlite_master WHERE type='table'")}
+        if "sample_questions" not in seed_tables:
+            return
+        conn.execute("DELETE FROM sample_questions")
+        conn.execute("""INSERT INTO sample_questions
+            (id, level, section, qtype, stem, options, answer, source, created_at)
+            SELECT id, level, section, qtype, stem, options, answer, source, created_at
+            FROM seed.sample_questions""")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -318,8 +344,21 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE users SET daily_goal=30 WHERE daily_goal IS NULL OR daily_goal < 1 OR daily_goal > 200")
     if "zh_source" not in _column_names(conn, "words"):
         conn.execute("ALTER TABLE words ADD COLUMN zh_source TEXT")
+    # v0.6: 考频 / 教材 / 课号
+    for _col in ("exam_freq", "textbook", "lesson"):
+        if _col not in _column_names(conn, "words"):
+            conn.execute(f"ALTER TABLE words ADD COLUMN {_col} TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_words_freq ON words(exam_freq)")
+    # v0.6: JEES 官方样题表
+    conn.execute("""CREATE TABLE IF NOT EXISTS sample_questions (
+        id TEXT PRIMARY KEY, level TEXT NOT NULL, section TEXT NOT NULL,
+        qtype TEXT, stem TEXT NOT NULL, options TEXT NOT NULL,
+        answer INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'jees-sample',
+        created_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sq_level ON sample_questions(level, section)")
     _migrate_fsrs_columns(conn)
     _import_books(conn)
+    _import_sample_questions(conn)
     _backfill_zh(conn)
     _backfill_example_zh(conn)
 
