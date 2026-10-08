@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 # 种子库 (首次启动复制为 /data/app.db)
 COPY backend/data/seed/yuyu-vocab.db ./app/data/seed/yuyu-vocab.db
+# 真人发音 MP3（v0.7 VOICEVOX；目录内只有 .gitkeep 时为空复制，不报错）
+COPY backend/data/audio ./app/data/audio
 
 COPY frontend ./frontend
 
