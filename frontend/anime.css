@@ -88,3 +88,19 @@ body.map-paused :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation-play
 @media (prefers-reduced-motion:reduce) { .map-home :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation:none!important; } }
 html[data-theme="dark"] .map-home .anime-environment { filter:brightness(.84) saturate(.96); }
 @media (prefers-color-scheme:dark) { html[data-theme="auto"] .map-home .anime-environment { filter:brightness(.84) saturate(.96); } }
+
+/* v1.2.2: 蓝色玻璃 tab 栏全局统一 */
+.tabbar {
+  background: #204e6bc9;
+  border: 1px solid #e4f4f580;
+  color: #fff;
+  box-shadow: inset 0 1px 0 #ffffff77, 0 12px 38px #07273e55;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.tabbar .tab { color: #e0edf0; }
+.tabbar .tab.active {
+  color: #ffe1a2;
+  background: linear-gradient(120deg,#e9ba6744,#fff1bb15);
+  box-shadow: inset 0 0 0 1px #fff2c44a;
+}
