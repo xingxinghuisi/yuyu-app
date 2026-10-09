@@ -52,7 +52,7 @@ body.map-paused :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation-play
 @keyframes sea-light { to { opacity:.4;transform:translateY(-9px); } }
 @keyframes mist-drift { to { transform:translateX(18px);opacity:.3; } }
 @keyframes petal-float { to { transform:translate(15px,27px) rotate(65deg);opacity:.5; } }
-@media (min-width:1100px) { .voyage-world { position:relative;top:auto; }.map-home .tabbar { left:calc(50% - 176px);width:440px; } }
+@media (min-width:1100px) { .voyage-world { position:relative;top:auto; } }
 @media (min-width:701px) and (max-width:1000px) { .voyage-layout { grid-template-columns:minmax(0,1fr) 255px;gap:0 24px; }.map-home .app { padding:24px 24px 120px; }.map-world-caption>span { display:none; }.map-island-label { gap:5px;padding:7px; }.map-island-label strong { font-size:12px; }.map-island-label small { font-size:9px; }.island-seal { width:25px;height:25px; }.map-traveler { width:75px;height:115px; } }
 @media (max-width:700px) {
   .map-home .app { max-width:560px;padding:0 0 calc(110px + env(safe-area-inset-bottom)); }
@@ -82,7 +82,7 @@ body.map-paused :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation-play
   .anime-quick-course { height:90px;min-height:90px;bottom:156px; }.anime-quick-course b { white-space:nowrap;font-size:22px;letter-spacing:1px; }.anime-quick-course>svg { flex-shrink:0;width:18px; }.anime-quick-course small { font-size:10px; }
   .anime-progress-strip { position:fixed;display:flex;align-items:center;gap:10px;left:50%;transform:translateX(-50%);bottom:calc(91px + env(safe-area-inset-bottom));width:calc(100% - 32px);max-width:440px;min-height:54px;padding:10px 15px;border-radius:19px;z-index:55;color:#f8f5ed; }
   .anime-progress-strip>svg { width:26px;height:26px;color:#f7d69c;flex-shrink:0; }.anime-progress-strip>div { flex:1;min-width:0; }.anime-progress-strip b { font-size:12px;font-weight:500; }.anime-progress-strip small { float:right;font-size:10px;color:#dae7f4; }.anime-progress-strip .map-progress { height:6px;margin:7px 0 0; }.anime-progress-strip>a { border-left:1px solid #d7e8fa66;padding-left:13px;color:#f1f4ff;font-size:11px;text-decoration:none;white-space:nowrap; }
-  .map-home .tabbar { left:50%;bottom:calc(12px + env(safe-area-inset-bottom));max-width:440px;min-height:66px;border-radius:32px; }.map-home .tab { padding:8px 4px; }.map-home .tab svg { width:23px;height:23px; }
+
 }
 @media (max-width:360px) { .voyage-intro { padding-left:16px; }.map-brand { font-size:62px; }.map-wordmark { font-size:10px;letter-spacing:3px; }.map-tagline { font-size:12px; }.map-daily { right:10px;width:48%;padding:10px 7px; }.map-daily b { font-size:18px; }.daily-streak .flame { width:19px; }.daily-ring { display:none; }.map-island-label { padding:6px;gap:4px; }.map-island-label strong { font-size:12px; }.map-island-label small { font-size:8px; }.island-seal { width:25px;height:25px; }.anime-quick-course { width:142px;min-height:90px;right:12px;padding:12px; }.anime-quick-course b { font-size:18px; }.anime-quick-course small { font-size:9px; }.anime-quick-course em { font-size:9px; } }
 @media (prefers-reduced-motion:reduce) { .map-home :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation:none!important; } }

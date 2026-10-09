@@ -107,8 +107,20 @@ async function main() {
     await page.evaluate(()=>{localStorage.setItem('yuyu_map_motion','auto');updateMapMotion();});
     console.log('PASS check-in, existing poster, reduced-motion persistence/system preference');
 
+    const navSizes={};
+    async function navSize() {
+      return page.locator('#tabbar').evaluate(el=>{
+        const rect=el.getBoundingClientRect(), css=getComputedStyle(el);
+        return {width:rect.width,height:rect.height,x:rect.x,bottom:innerHeight-rect.bottom,radius:css.borderRadius,
+          items:[...el.querySelectorAll('.tab')].map(tab=>{
+            const b=tab.getBoundingClientRect(),icon=tab.querySelector('svg').getBoundingClientRect();
+            return {width:b.width,height:b.height,iconWidth:icon.width,iconHeight:icon.height};
+          })};
+      });
+    }
     for(const width of [320,390,768,1440]) {
       await page.setViewportSize({width,height:844});
+      navSizes[width]=await navSize();
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'overflow at '+width+' '+JSON.stringify(await page.locator('body *').evaluateAll(els=>els.map(el=>({tag:el.tagName,cls:el.className,left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right})).filter(b=>b.right>innerWidth+1&&b.tag!=='svg'&&typeof b.cls==='string').slice(0,12))));
       if(width<=390) assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+1),'explore fits viewport');
       for (const kind of ['island','node']) for (let i=0;i<5;i++) {
@@ -145,11 +157,18 @@ async function main() {
     await page.screenshot({path:path.join(OUT,'profile-glass.png')});
     console.log('PASS original shelf/shuffle, review, quiz and profile routes');
 
+    for(const width of [320,390,768,1440]) {
+      await page.setViewportSize({width,height:844});
+      assert.deepEqual(await navSize(),navSizes[width],'home/profile navigation geometry matches at '+width);
+    }
+    await page.setViewportSize({width:390,height:844});
+    console.log('PASS identical navigation width/height/position/radius/button/icon sizes on home and profile at 320/390/768/1440');
+
     // Warm SW must cache the new shell and never authenticated API responses.
     await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();
     if(!IN_PROCESS) {
     await page.evaluate(()=>navigator.serviceWorker.ready);
-    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v23-ordered-islands');return (await c.keys()).map(r=>new URL(r.url).pathname);});
+    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v24-unified-navigation');return (await c.keys()).map(r=>new URL(r.url).pathname);});
     assert.ok(cached.includes('/map.js')&&cached.includes('/map-model.js')&&cached.includes('/map.css'));
     assert.ok(!cached.some(p=>p.startsWith('/api')));
     await context.setOffline(true);await page.reload();await page.locator('#map-retry').waitFor();

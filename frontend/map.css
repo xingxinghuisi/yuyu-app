@@ -119,7 +119,7 @@ body.map-paused :is(.map-cloud,.map-petals,.map-boat,.traveler-bob) { animation-
 html[data-theme="dark"] .map-home::before { background: radial-gradient(ellipse at 15% 8%,#325c75,transparent 55%),#102e47; }
 html[data-theme="dark"] .map-home .archipelago-art { filter: brightness(.78) saturate(.85); }
 @media(prefers-color-scheme:dark) { html[data-theme="auto"] .map-home::before { background: radial-gradient(ellipse at 15% 8%,#325c75,transparent 55%),#102e47; } html[data-theme="auto"] .map-home .archipelago-art { filter: brightness(.78) saturate(.85); } }
-@media (min-width: 1100px) { .voyage-log { margin-top: -12px; }.voyage-world { position: sticky; top: 24px; }.map-home .tabbar { width: 390px; } }
+@media (min-width: 1100px) { .voyage-log { margin-top: -12px; }.voyage-world { position: sticky; top: 24px; } }
 @media (max-width: 900px) and (min-width: 701px) { .map-home .app { padding: 24px 24px 125px; }.voyage-layout { grid-template-columns: 250px minmax(0,1fr); gap: 0 24px; }.map-brand { font-size: 76px; }.map-world-caption>span { display: none; }.map-world-caption { justify-content: end; }.map-island-label { gap: 4px; padding: 7px; }.map-island-label strong { font-size: 11px; }.map-island-label small { font-size: 8px; }.island-seal { width: 22px; height: 22px; }.map-traveler { width: 50px; height: 78px; }.map-world-footer { padding: 8px 12px; letter-spacing: 0; } }
 @media (max-width: 700px) {
   .map-home .app { padding: 0 0 calc(110px + env(safe-area-inset-bottom)); max-width: 560px; }
@@ -146,8 +146,6 @@ html[data-theme="dark"] .map-home .archipelago-art { filter: brightness(.78) sat
   .voyage-log { width: 100%; padding: 16px 20px 0; background: linear-gradient(#0d4b70,#16445f); }
   .map-course { padding: 20px; }.map-course h2 { font-size: 27px; }.map-course>p[lang] { margin-bottom: 18px; }
   .map-shortcuts { grid-template-columns: 1fr 1fr; gap: 10px; }.map-shortcuts a { padding: 13px 12px; gap: 8px; }.map-shortcuts svg:last-child { display: none; }.map-shortcuts svg { width: 20px; height: 20px; }.map-shortcuts b { font-size: 11px; }.map-shortcuts small { font-size: 9px; }
-  .map-home .tabbar { width: calc(100% - 32px); max-width: 440px; bottom: calc(12px + env(safe-area-inset-bottom)); border-radius: 30px; padding: 6px; }
-  .map-home .tab { min-width: 0; flex: 1; font-size: 11px; padding: 8px 5px; }.map-home .tab.active { border-radius: 24px; }
   .map-sea-name { font-size: 10px; }.map-north { font-size: 10px; top: 5%; }
 }
 @media (max-width: 360px) { .map-brand { font-size: 57px; }.voyage-intro { padding-left: 18px; }.map-daily { right: 12px; width: 49%; }.daily-ring { display: none; }.map-island-label strong { font-size: 11px; }.map-island-label small { font-size: 7px; }.map-island-label { padding: 6px; }.island-seal { width: 22px; height: 22px; } }

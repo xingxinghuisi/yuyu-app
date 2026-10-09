@@ -170,12 +170,15 @@ html[data-theme="dark"] .icon-sun { display: none; }
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(14px + env(safe-area-inset-bottom));
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: calc(100% - 32px);
+  max-width: 440px;
+  min-height: 70px;
   z-index: 60;
   display: flex;
   gap: 4px;
-  padding: 8px;
-  border-radius: 28px;
+  padding: 6px;
+  border-radius: 32px;
   backdrop-filter: blur(24px) saturate(85%);
   -webkit-backdrop-filter: blur(24px) saturate(85%);
   background: color-mix(in srgb, var(--paper) 38%, transparent);
@@ -208,15 +211,17 @@ body.tabbar-full-hide .app {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  min-width: 68px;
-  padding: 8px 10px 7px;
-  border-radius: 20px;
+  min-width: 0;
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 24px;
   color: var(--ink-soft);
   text-decoration: none;
   font-size: 11px;
+  line-height: 14px;
   transition: all .25s var(--spring);
 }
-.tab svg { width: 22px; height: 22px; }
+.tab svg { width: 23px; height: 23px; }
 .tab.active {
   color: var(--vermilion);
   background: color-mix(in srgb, var(--vermilion) 12%, transparent);
