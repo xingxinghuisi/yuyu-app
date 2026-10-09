@@ -89,7 +89,8 @@ body {
 .app {
   max-width: 480px;
   margin: 0 auto;
-  padding: calc(64px + env(safe-area-inset-top)) 18px calc(var(--tabbar-h) + 28px);
+  /* v1.0.1: 底部 padding 计入安全区，避免内容被底栏遮挡 */
+  padding: calc(64px + env(safe-area-inset-top)) 18px calc(var(--tabbar-h) + 28px + env(safe-area-inset-bottom));
   min-height: 100vh;
 }
 
@@ -180,6 +181,17 @@ html[data-theme="dark"] .icon-sun { display: none; }
   background: color-mix(in srgb, var(--paper) 58%, transparent);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-hi), 0 16px 40px rgba(28, 28, 30, .14);
+  /* v1.0.1: X 风格下滑隐藏/上滑显示 */
+  transition: transform .3s ease, opacity .3s ease;
+}
+/* v1.0.1: 滚动隐藏状态（fixed 定位，不影响布局） */
+.tabbar.tabbar-auto-hide {
+  transform: translateX(-50%) translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabbar { transition: none; }
 }
 .tab {
   display: flex;
