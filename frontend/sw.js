@@ -1,10 +1,15 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v18';
+var CACHE_NAME = 'yuyu-v19-archipelago';
 var ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './map-model.js',
+  './map.js',
+  './map.css',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   './manifest.json'
 ];
 
@@ -37,6 +42,7 @@ self.addEventListener('fetch', function (event) {
   try {
     var url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
+    if (url.pathname === '/api' || url.pathname.indexOf('/api/') === 0) return;
   } catch (e) { return; }
 
   event.respondWith(

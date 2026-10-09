@@ -1,5 +1,9 @@
 # 数据来源与署名 (ATTRIBUTION)
 
+## 群岛地图插画
+
+`frontend/map.js` 中的海水、岛屿、树木、建筑、踏石与旅人均为本项目原创 SVG/CSS 素材，随应用代码使用 MIT 协议；未嵌入用户参考图或第三方美术素材。
+
 本词库的 source 数据来自以下开源项目, 均遵循 CC BY-SA 4.0
 (Creative Commons Attribution-ShareAlike 4.0 International) 或兼容协议。
 **使用条件: 署名 + 标明修改 + 衍生数据以相同协议共享。**

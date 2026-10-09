@@ -1,0 +1,156 @@
+/* Scoped to the map route so the established learning screens keep their design. */
+body.map-home { background: #103c58; color: #f9f5e9; }
+body.map-home::before { content: ''; position: fixed; inset: 0; z-index: -1; background: radial-gradient(ellipse at 15% 8%, #7dbac2 0, transparent 55%), linear-gradient(140deg,#427c93,#163e5d 70%); }
+.map-home .app { max-width: 1320px; padding: 48px 48px 130px; }
+.map-home #app.page-enter { animation: map-page-enter .3s ease both; }
+@keyframes map-page-enter { from { opacity: 0; } to { opacity: 1; } }
+.map-home .topbar { display: none; }
+.map-home .tabbar { background: #204e6bc9; border-color: #e4f4f580; color: #fff; box-shadow: inset 0 1px 0 #ffffff77, 0 12px 38px #07273e55; }
+.map-home .tab { color: #e0edf0; }
+.map-home .tab.active { color: #ffe1a2; background: linear-gradient(120deg,#e9ba6744,#fff1bb15); box-shadow: inset 0 0 0 1px #fff2c44a; }
+.map-home .tabbar.tabbar-auto-hide { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+.map-home button, .map-home a { -webkit-tap-highlight-color: #fff2; }
+.map-home button { font-family: inherit; cursor: pointer; }
+.map-home button:disabled { cursor: default; }
+.map-home :is(button,a):focus-visible { outline: 3px solid #fff2b6; outline-offset: 5px; }
+.map-glass { background: linear-gradient(130deg,#e6f5f02c,#77a4c01f); border: 1px solid #deedf15e; border-radius: 24px; box-shadow: inset 0 1px 0 #ffffff40,0 14px 36px #062a3e20; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.voyage-layout { display: grid; grid-template-columns: minmax(260px,340px) minmax(0,1fr); gap: 0 46px; position: relative; align-items: start; }
+.voyage-intro { grid-column: 1; grid-row: 1; position: relative; z-index: 2; padding-top: 24px; }
+.map-eyebrow { font-size: 9px; letter-spacing: 2.5px; color: #d4e6e4a8; line-height: 1.8; max-width: 270px; }
+.map-brand { font: 500 92px/1.12 'STKaiti','KaiTi','Yu Mincho','Songti SC',serif; letter-spacing: 7px; text-shadow: 0 4px 20px #153c5950; margin: 16px 0 2px; position: relative; width: fit-content; }
+.brand-flower { position: absolute; right: -23px; bottom: 8px; font: 28px/1 serif; color: #f5b8c9; transform: rotate(20deg); }
+.map-wordmark { font: 16px/1.6 Georgia,serif; letter-spacing: 6px; margin-left: 6px; }
+.map-tagline { font: 20px/1.8 'STKaiti','KaiTi','Songti SC',serif; letter-spacing: 4px; color: #edf3e9; margin: 20px 0 30px; }
+.map-welcome { font-size: 15px; letter-spacing: 1px; }
+.map-welcome span { display: block; font-size: 12px; opacity: .7; margin-top: 8px; }
+.map-daily { display: flex; padding: 18px 12px; margin-top: 25px; gap: 10px; }
+.map-daily small { display: block; font-size: 11px; letter-spacing: 1px; color: #e9f3ee; line-height: 1.7; }
+.map-daily b { display: block; font-size: 24px; font-weight: 500; white-space: nowrap; }
+.map-daily em { font-size: 12px; font-style: normal; }
+.daily-streak { display: flex; align-items: center; gap: 8px; background: none; color: inherit; border: 0; padding: 0 12px 0 0; border-right: 1px solid #e6f7f447; text-align: left; flex: 1; }
+.daily-streak:disabled { opacity: 1; }
+.daily-streak .flame { width: 27px; height: 38px; fill: #f9b567; flex-shrink: 0; }
+#map-checkin-text { font-size: 9px; opacity: .7; }
+.daily-goal { display: flex; align-items: center; justify-content: space-between; text-decoration: none; color: inherit; gap: 10px; flex: 1; }
+.daily-ring { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: conic-gradient(#ffda8c var(--progress),#d8e7e33b 0); position: relative; }
+.daily-ring::before { content: ''; position: absolute; inset: 3px; border-radius: inherit; background: #4c7d91; }
+.daily-ring svg { width: 18px; height: 18px; position: relative; color: #fce5b4; }
+.map-desktop-note { padding-top: 38px; }
+.map-desktop-note>span { font: 11px Georgia,serif; letter-spacing: 3px; color: #e9d3ac; }
+.map-desktop-note p { font: 16px/1.9 'Songti SC',serif; letter-spacing: 2px; color: #d4e3e2; }
+.map-legend { display: flex; gap: 18px; font-size: 10px; color: #d5e5e7; }
+.map-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b1c1d0; margin-right: 5px; }
+.map-legend .gold { background: #edc578; }.map-legend .coral { background: #ffaaa0; }
+.voyage-world { grid-column: 2; grid-row: 1 / 3; overflow: hidden; position: relative; border: 1px solid #d9f1ee66; border-radius: 34px; background: #267e9a; box-shadow: 0 28px 80px #03243855,inset 0 1px 0 #ffffff80; }
+.map-world-caption { position: absolute; top: 22px; left: 24px; right: 24px; display: flex; align-items: center; justify-content: space-between; z-index: 3; font-size: 10px; letter-spacing: 1px; color: #154a61; }
+.map-world-caption>span { display: flex; align-items: center; gap: 7px; }
+.map-world-caption svg { width: 20px; height: 20px; }
+.map-world-caption button { border: 1px solid #fffc; border-radius: 20px; padding: 8px 12px; background: #f2fcf4a1; color: #234f62; font-size: 10px; min-height: 36px; }
+.map-stage { position: relative; width: 100%; aspect-ratio: 720/1020; isolation: isolate; }
+.archipelago-art { display: block; width: 100%; height: 100%; position: absolute; inset: 0; pointer-events: none; }
+.map-controls { position: absolute; inset: 0; }
+.map-island-label { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%,-50%); display: flex; align-items: center; gap: 8px; border: 1px solid #fffc; background: linear-gradient(130deg,#fffaf0ed,#e9f4eedb); color: #2f5360; border-radius: 18px; padding: 9px 12px 9px 8px; text-align: left; box-shadow: 0 6px 20px #153c5930; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); white-space: nowrap; min-height: 48px; transition: box-shadow .2s,background .2s; z-index: 3; }
+.map-island-label strong { font-size: clamp(12px,1.4vw,17px); letter-spacing: .5px; font-weight: 600; }
+.map-island-label small { display: block; font: 10px/1.7 'Yu Mincho','Songti SC',serif; letter-spacing: .5px; opacity: .8; }
+.island-seal { display: grid; place-items: center; border-radius: 50%; width: 28px; height: 28px; background: #698393; color: white; box-shadow: inset 0 0 0 2px #ffffff88; }
+.island-seal svg { width: 16px; height: 16px; }
+.map-island-label.open { background: linear-gradient(130deg,#fff5dcf5,#ffe4d7ef); color: #9b493b; }
+.map-island-label.open .island-seal { background: #d77762; }
+.map-island-label.complete .island-seal { background: #c3994c; }
+.map-island-label[aria-pressed="true"] { border-color: #fff6d4; box-shadow: 0 0 0 3px #fff0bd66,0 8px 24px #17456555; }
+.map-node { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%,-50%); width: 45px; height: 45px; display: grid; place-items: center; padding: 10px; border: 0; border-radius: 50%; background: none; color: #fff4d8; z-index: 2; }
+.map-node::before { content: ''; position: absolute; inset: 8px 1px; border-radius: 50%; background: #b7c8ca; border: 2px solid #f9f7e3; box-shadow: 0 4px 0 #607d8b,0 6px 13px #123a5966; }
+.map-node.open::before,.map-node.complete::before { background: #eac37b; box-shadow: 0 4px 0 #bd8b50,0 0 20px #ffe19f88; }
+.map-node.current::before { background: #eb8c7c; box-shadow: 0 4px 0 #ba665e,0 0 0 8px #ffdcbb25; animation: map-beacon 3s ease-in-out infinite; }
+.map-node svg { width: 20px; height: 20px; z-index: 1; position: relative; }
+.map-traveler { position: absolute; left: var(--x); top: var(--y); width: 66px; height: 100px; transform: translate(-50%,-95%); background: none; border: 0; padding: 0; z-index: 4; }
+.map-traveler svg { width: 100%; height: 100%; overflow: visible; }
+.traveler-bob { animation: map-bob 3.2s ease-in-out infinite; }
+.map-sea-name { position: absolute; left: 8%; top: 53%; writing-mode: vertical-rl; font: 13px 'Yu Mincho','Songti SC',serif; letter-spacing: 6px; opacity: .5; }
+.map-north { position: absolute; top: 8%; left: 8%; font: 12px/1.7 Georgia,serif; color: #35657a; text-align: center; }
+.map-world-footer { min-height: 48px; padding: 8px 22px; display: flex; justify-content: space-between; align-items: center; color: #daedf0; font-size: 10px; letter-spacing: 2px; background: #0d4b70; }
+#map-motion { background: #ffffff0c; color: #deedf0; border: 1px solid #bfdcdd55; border-radius: 14px; padding: 8px 10px; min-height: 34px; font-size: 10px; letter-spacing: 1px; }
+.voyage-log { grid-column: 1; grid-row: 2; padding-top: 30px; position: relative; z-index: 3; }
+.map-course { padding: 22px; color: #f7f5e9; scroll-margin-bottom: 100px; }
+.course-kicker { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 1px; color: #d6e6e5; }
+.course-kicker svg { width: 18px; height: 18px; }
+.course-level { margin-left: auto; border: 1px solid #dbe8df66; border-radius: 7px; padding: 3px 7px; font-size: 10px; }
+.map-course h2 { font: 30px/1.5 'STKaiti','KaiTi','Songti SC',serif; margin-top: 12px; letter-spacing: 4px; }
+.map-course>p[lang] { margin: 0 0 22px; font: 12px 'Yu Mincho','Songti SC',serif; color: #c9dee0; letter-spacing: 2px; }
+.course-chapter,.course-count { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.course-chapter b { font-size: 16px; font-weight: 500; }
+.course-chapter>span,.course-count { font-size: 10px; color: #d6e4e2; }
+.map-progress { height: 7px; border-radius: 10px; background: #bfd9de33; overflow: hidden; margin: 12px 0 8px; }
+.map-progress i { height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg,#edd7a6,#f9c570); }
+.course-status { font-size: 11px; color: #e8d4ad; margin: 20px 0 12px; }
+.map-cta { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 10px; text-decoration: none; padding: 15px 18px; min-height: 50px; border: 1px solid #ffedc1; border-radius: 14px; color: #734e3b; background: linear-gradient(110deg,#ffedc7,#efcb91); font-size: 13px; font-weight: 600; box-shadow: 0 6px 15px #1a425133; }
+.map-cta svg { width: 18px; height: 18px; }
+.map-cta:disabled { opacity: .5; }
+.map-cta.secondary { background: #d8edf21c; color: #f4f6ef; border-color: #c7e4e75e; }
+.course-shelf { display: block; color: #d5e4e4; font-size: 10px; text-align: center; padding: 15px 0 0; text-decoration: none; }
+.course-lock-note { font-size: 12px; line-height: 1.8; color: #d4e3e2; }
+.map-shortcuts { display: grid; gap: 10px; margin-top: 14px; }
+.map-shortcuts a { text-decoration: none; color: #f0f5ec; display: flex; align-items: center; gap: 12px; padding: 14px 17px; border-radius: 18px; }
+.map-shortcuts svg { width: 22px; height: 22px; color: #d9ddba; }
+.map-shortcuts svg:last-child { width: 15px; margin-left: auto; }
+.map-shortcuts b { font-size: 12px; font-weight: 500; letter-spacing: 1px; }
+.map-shortcuts small { display: block; font-size: 10px; margin-top: 5px; color: #c6dce0; }
+.map-exam,.map-growth { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11px; color: #d2e4e7; padding: 18px 8px 0; text-decoration: none; }
+.map-exam svg,.map-growth svg { width: 16px; height: 16px; }
+.map-growth { color: #e4d4b8; padding-top: 12px; }
+.map-progress-note { font-size: 10px; line-height: 1.8; text-align: center; color: #c0d5dc; opacity: .8; margin: 18px 0 0; }
+.map-loading { display: flex; min-height: 70vh; justify-content: center; align-items: center; flex-direction: column; color: #e5f0ed; gap: 14px; font-size: 14px; text-align: center; }
+.map-loading>svg { width: 48px; height: 48px; color: #edcf9e; }.map-error .map-cta { max-width: 270px; }.map-error a { color: #e3ece7; padding: 15px; }
+.map-cloud { animation: map-cloud-drift 12s ease-in-out infinite alternate; }.cloud-1 { animation-delay: -4s; }.cloud-2 { animation-delay: -8s; }
+.map-petals { animation: map-petal-drift 7s ease-in-out infinite alternate; }
+.map-boat { animation: map-boat-drift 6s ease-in-out infinite alternate; }
+@keyframes map-bob { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-5px) rotate(2deg); } }
+@keyframes map-beacon { 0%,100% { box-shadow: 0 4px 0 #ba665e,0 0 0 6px #ffdcbb22; } 50% { box-shadow: 0 4px 0 #ba665e,0 0 0 12px #ffdcbb44; } }
+@keyframes map-cloud-drift { to { transform: translateX(12px); } }
+@keyframes map-petal-drift { to { transform: translate(7px,10px); opacity: .6; } }
+@keyframes map-boat-drift { to { translate: 0 -4px; } }
+body.map-paused :is(.map-cloud,.map-petals,.map-boat,.traveler-bob,.map-node.current)::before,
+body.map-paused :is(.map-cloud,.map-petals,.map-boat,.traveler-bob) { animation-play-state: paused; }
+.map-reduced :is(.map-cloud,.map-petals,.map-boat,.traveler-bob),.map-reduced .map-node.current::before { animation: none; }
+.map-reduced :is(.map-glass,.map-island-label),.map-reduced.map-home .tabbar { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.map-reduced .map-glass { background: linear-gradient(120deg,#376b83,#2d5975); }
+.map-reduced .map-island-label { background: #eef1e7; }
+.map-reduced .map-island-label.open { background: #ffead8; }
+html[data-theme="dark"] .map-home::before { background: radial-gradient(ellipse at 15% 8%,#325c75,transparent 55%),#102e47; }
+html[data-theme="dark"] .map-home .archipelago-art { filter: brightness(.78) saturate(.85); }
+@media(prefers-color-scheme:dark) { html[data-theme="auto"] .map-home::before { background: radial-gradient(ellipse at 15% 8%,#325c75,transparent 55%),#102e47; } html[data-theme="auto"] .map-home .archipelago-art { filter: brightness(.78) saturate(.85); } }
+@media (min-width: 1100px) { .voyage-log { margin-top: -12px; }.voyage-world { position: sticky; top: 24px; }.map-home .tabbar { width: 390px; } }
+@media (max-width: 900px) and (min-width: 701px) { .map-home .app { padding: 24px 24px 125px; }.voyage-layout { grid-template-columns: 250px minmax(0,1fr); gap: 0 24px; }.map-brand { font-size: 76px; }.map-world-caption>span { display: none; }.map-world-caption { justify-content: end; }.map-island-label { gap: 4px; padding: 7px; }.map-island-label strong { font-size: 11px; }.map-island-label small { font-size: 8px; }.island-seal { width: 22px; height: 22px; }.map-traveler { width: 50px; height: 78px; }.map-world-footer { padding: 8px 12px; letter-spacing: 0; } }
+@media (max-width: 700px) {
+  .map-home .app { padding: 0 0 calc(110px + env(safe-area-inset-bottom)); max-width: 560px; }
+  .voyage-layout { display: flex; flex-direction: column; gap: 0; }
+  .voyage-intro { width: 100%; padding: calc(28px + env(safe-area-inset-top)) 24px 16px; min-height: 200px; background: linear-gradient(135deg,#719fb420,#28789338); }
+  .map-eyebrow,.map-welcome,.map-desktop-note { display: none; }
+  .map-brand { font-size: 66px; margin: 0; letter-spacing: 6px; }
+  .brand-flower { font-size: 22px; right: -17px; bottom: 6px; }
+  .map-wordmark { font-size: 10px; letter-spacing: 3px; margin-left: 4px; }
+  .map-tagline { font-size: 13px; line-height: 1.8; letter-spacing: 2px; margin: 12px 0 0; }
+  .map-daily { position: absolute; top: calc(49px + env(safe-area-inset-top)); right: 20px; width: 48%; padding: 12px 8px; border-radius: 19px; margin-top: 0; gap: 8px; }
+  .map-daily b { font-size: 20px; }.map-daily em { font-size: 9px; }.map-daily small { font-size: 9px; letter-spacing: 0; }
+  .daily-streak { padding-right: 8px; gap: 5px; }.daily-streak .flame { width: 19px; height: 27px; }
+  .daily-goal { gap: 5px; }.daily-ring { width: 24px; height: 24px; flex-shrink: 0; }.daily-ring svg { width: 13px; height: 13px; }
+  #map-checkin-text { font-size: 8px; }
+  .voyage-world { width: 100%; border-radius: 0; border: 0; box-shadow: none; overflow: visible; }
+  .map-world-caption { top: -30px; left: auto; right: 20px; font-size: 9px; }.map-world-caption>span { display: none; }.map-world-caption button { padding: 5px 10px; background: #e6f6f118; color: #f1f8f1; border-color: #e5f3ec55; min-height: 30px; }
+  .map-stage { overflow: hidden; }
+  .map-island-label { border-radius: 13px; padding: 7px 8px 7px 5px; gap: 5px; }
+  .map-island-label strong { font-size: 12px; }.map-island-label small { font-size: 8px; }.island-seal { width: 24px; height: 24px; }.island-seal svg { width: 14px; height: 14px; }
+  .map-traveler { width: 53px; height: 83px; }
+  .map-node { width: 44px; height: 44px; }.map-node::before { inset: 10px 4px; }.map-node svg { width: 16px; height: 16px; }
+  .map-world-footer { padding: 8px 22px; font-size: 9px; min-height: 46px; }
+  .voyage-log { width: 100%; padding: 16px 20px 0; background: linear-gradient(#0d4b70,#16445f); }
+  .map-course { padding: 20px; }.map-course h2 { font-size: 27px; }.map-course>p[lang] { margin-bottom: 18px; }
+  .map-shortcuts { grid-template-columns: 1fr 1fr; gap: 10px; }.map-shortcuts a { padding: 13px 12px; gap: 8px; }.map-shortcuts svg:last-child { display: none; }.map-shortcuts svg { width: 20px; height: 20px; }.map-shortcuts b { font-size: 11px; }.map-shortcuts small { font-size: 9px; }
+  .map-home .tabbar { width: calc(100% - 32px); max-width: 440px; bottom: calc(12px + env(safe-area-inset-bottom)); border-radius: 30px; padding: 6px; }
+  .map-home .tab { min-width: 0; flex: 1; font-size: 11px; padding: 8px 5px; }.map-home .tab.active { border-radius: 24px; }
+  .map-sea-name { font-size: 10px; }.map-north { font-size: 10px; top: 5%; }
+}
+@media (max-width: 360px) { .map-brand { font-size: 57px; }.voyage-intro { padding-left: 18px; }.map-daily { right: 12px; width: 49%; }.daily-ring { display: none; }.map-island-label strong { font-size: 11px; }.map-island-label small { font-size: 7px; }.map-island-label { padding: 6px; }.island-seal { width: 22px; height: 22px; } }
+@media (prefers-reduced-motion: reduce) { .map-home *, .map-home *::before { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@supports not (aspect-ratio: 1) { .map-stage { height: 0; padding-bottom: 141.6667%; } }
+@supports not (backdrop-filter: blur(1px)) { .map-glass { background: #2c607b; }.map-island-label { background: #f3f4e8; } }

@@ -96,7 +96,7 @@ def _import_vocab_tables(conn: sqlite3.Connection) -> None:
         raise FileNotFoundError("seed db not found; cannot import vocab tables")
     # 先提交: 避免 ATTACH 后跨库操作受未提交事务影响 (见 _import_books 注释)
     conn.commit()
-    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    conn.execute("ATTACH DATABASE ? AS seed", (seed.resolve().as_uri() + "?mode=ro",))
     try:
         if "words" in needed:
             conn.execute("""CREATE TABLE words (
@@ -168,7 +168,7 @@ def _import_books(conn: sqlite3.Connection) -> None:
     if seed is None:
         raise FileNotFoundError("seed db not found; cannot import books")
     conn.commit()
-    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    conn.execute("ATTACH DATABASE ? AS seed", (seed.resolve().as_uri() + "?mode=ro",))
     try:
         seed_tables = {r[0] for r in conn.execute(
             "SELECT name FROM seed.sqlite_master WHERE type='table'")}
@@ -208,7 +208,7 @@ def _import_sample_questions(conn: sqlite3.Connection) -> None:
     if seed is None:
         return
     conn.commit()
-    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    conn.execute("ATTACH DATABASE ? AS seed", (seed.resolve().as_uri() + "?mode=ro",))
     try:
         seed_tables = {r[0] for r in conn.execute(
             "SELECT name FROM seed.sqlite_master WHERE type='table'")}
@@ -241,7 +241,7 @@ def _backfill_zh(conn: sqlite3.Connection) -> None:
     if "meaning_zh" not in cols:
         return
     conn.commit()
-    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    conn.execute("ATTACH DATABASE ? AS seed", (seed.resolve().as_uri() + "?mode=ro",))
     try:
         seed_cols = {r[1] for r in conn.execute("PRAGMA seed.table_info(words)")}
         if "meaning_zh" not in seed_cols:
@@ -274,7 +274,7 @@ def _upgrade_zh_llm(conn: sqlite3.Connection) -> None:
     if "meaning_zh" not in cols or "zh_source" not in cols:
         return
     conn.commit()
-    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    conn.execute("ATTACH DATABASE ? AS seed", (seed.resolve().as_uri() + "?mode=ro",))
     try:
         seed_cols = {r[1] for r in conn.execute("PRAGMA seed.table_info(words)")}
         if "meaning_zh" not in seed_cols or "zh_source" not in seed_cols:
@@ -312,7 +312,7 @@ def _backfill_example_zh(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE examples ADD COLUMN zh_source TEXT")
         conn.commit()
     conn.commit()
-    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    conn.execute("ATTACH DATABASE ? AS seed", (seed.resolve().as_uri() + "?mode=ro",))
     try:
         seed_cols = {r[1] for r in conn.execute("PRAGMA seed.table_info(examples)")}
         if "sentence_zh" not in seed_cols:
@@ -424,7 +424,8 @@ def init_db(data_dir: str | None = None) -> str:
             raise FileNotFoundError("seed db not found; checked SEED_DB and default locations")
         shutil.copy2(seed, db_path)
 
-    conn = sqlite3.connect(db_path)
+    # Enable read-only ATTACH URIs on all platforms (including Windows drive paths).
+    conn = sqlite3.connect(db_path, uri=True)
     try:
         conn.executescript(APP_TABLES)
         _migrate(conn)

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><linearGradient id="sea" x2="1" y2="1"><stop stop-color="#579bac"/><stop offset="1" stop-color="#164260"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#sea)"/>
+  <path d="M87 342q169 78 338-3M118 376q142 56 282-2" fill="none" stroke="#b4e8e3" stroke-width="12" stroke-linecap="round" opacity=".7"/>
+  <ellipse cx="256" cy="311" rx="158" ry="62" fill="#eddbb6"/>
+  <ellipse cx="256" cy="299" rx="136" ry="48" fill="#88ae88"/>
+  <path d="M178 189v129h20V188m115 1v129h20V188" fill="#d56c54"/>
+  <path d="M157 210h198v17H157" fill="#e99771"/>
+  <path d="M133 157q123 33 246 0l-12 28q-111 22-222 0z" fill="#2e3e50"/>
+  <path d="M146 186h220v18H146" fill="#e99771"/>
+  <path d="M247 206h18v34h-18" fill="#d7b46f"/>
+  <g fill="#f3bfd0"><circle cx="125" cy="141" r="22"/><circle cx="99" cy="125" r="20"/><circle cx="129" cy="105" r="21"/><circle cx="152" cy="125" r="20"/><circle cx="377" cy="279" r="18"/><circle cx="401" cy="268" r="18"/><circle cx="381" cy="250" r="18"/></g>
+  <g fill="#fff1e7"><circle cx="126" cy="125" r="8"/><circle cx="386" cy="266" r="6"/></g>
+</svg>
