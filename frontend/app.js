@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.0.0';
+var APP_VERSION = '1.0.1';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -430,6 +430,8 @@ function navigate() {
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
   window.scrollTo(0, 0);
   setChrome(r);
+  // v1.0.1: 路由切换时底栏重置为显示状态
+  if (typeof tabbarAutoHide !== 'undefined') tabbarAutoHide.reset();
   routes[r]();
   // v1.0: 路由级页面进入动画（右滑入+淡入）
   pageEnter();
@@ -464,6 +466,48 @@ function loadingHtml(text) {
     '<div class="glass skel-card"><div class="skel skel-line"></div><div class="skel skel-line short"></div></div>' +
   '</div>';
 }
+
+/* v1.0.1: X 风格底栏自动隐藏（下滑隐藏 / 上滑或停留显示） */
+var tabbarAutoHide = (function () {
+  var lastY = 0, downStart = 0, ticking = false, idleTimer = null;
+  var HIDE_AFTER = 60, IDLE_MS = 500;
+  function el() { return document.getElementById('tabbar'); }
+  function show() { var t = el(); if (t) t.classList.remove('tabbar-auto-hide'); }
+  function hide() {
+    var t = el(); if (!t) return;
+    if (t.classList.contains('hidden')) return; // 未登录时底栏不显示，无需处理
+    t.classList.add('tabbar-auto-hide');
+  }
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      var y = window.scrollY || window.pageYOffset || 0;
+      var t = el();
+      if (t && !t.classList.contains('hidden')) {
+        if (y <= 0) { show(); downStart = 0; }
+        else if (y > lastY) { // 向下滚动
+          if (downStart === 0) downStart = lastY;
+          if (y - downStart > HIDE_AFTER) hide();
+        } else if (y < lastY) { // 向上滚动
+          show(); downStart = 0;
+        }
+      }
+      lastY = y;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(function () { show(); }, IDLE_MS);
+    });
+  }
+  function reset() {
+    lastY = window.scrollY || 0; downStart = 0;
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    show();
+  }
+  // passive 监听，不阻塞滚动
+  window.addEventListener('scroll', onScroll, { passive: true });
+  return { reset: reset, show: show };
+})();
 
 /* ================= 6. 页面：登录 ================= */
 function renderLogin() {
