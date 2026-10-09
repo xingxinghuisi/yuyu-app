@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v23';
+var CACHE_NAME = 'yuyu-v24';
 var ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ var ASSETS = [
   './map-art.js',
   './map.css',
   './anime.css',
+  './sheet.css',
   // 动漫群岛小图预缓存（首屏快显）；大图与海面按需运行时缓存
   './assets/anime/sea-small.webp',
   './assets/anime/sakura-small.webp',
