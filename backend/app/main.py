@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth, seed_db, srs
+from . import auth, seed_db, srs, vocab_catalog, source_audio
 
 # ---------------- 基础 ----------------
 
@@ -106,10 +106,10 @@ LANGS = ("zh", "en")
 def display_meaning(row, lang: str = "zh") -> tuple[str, bool]:
     """返回 (显示释义, 是否为英文回退)。
 
-    en 模式: 直接用 meaning_en; zh 模式: meaning_zh 优先, 缺失则回退 meaning_en。
+    新源仅提供中文，en 模式无英文时显示中文，避免空白卡片。
     """
     if lang == "en":
-        return (row["meaning_en"] or ""), False
+        return (row["meaning_en"] or row["meaning_zh"] or ""), False
     m_zh = row["meaning_zh"]
     if m_zh:
         return m_zh, False
@@ -122,7 +122,7 @@ def word_display(row) -> str:
 
 def example_display_sentence(e, lang: str = "zh") -> str:
     if lang == "en":
-        return e["sentence_en"] or ""
+        return e["sentence_en"] or e["sentence_zh"] or ""
     return e["sentence_zh"] or e["sentence_en"] or ""
 
 
@@ -133,13 +133,14 @@ def word_to_dict(row, conn: sqlite3.Connection, lang: str = "zh") -> dict:
     except Exception:
         pos = []
     ex_rows = conn.execute(
-        "SELECT sentence_ja, furigana, sentence_en, sentence_zh"
+        "SELECT sentence_ja, furigana, sentence_en, sentence_zh, source"
         " FROM examples WHERE word_id=? ORDER BY id",
         (row["id"],),
     ).fetchall()
     examples = [
         {"ja": e["sentence_ja"], "furigana": e["furigana"],
          "en": e["sentence_en"], "zh": e["sentence_zh"],
+         "kind": e["source"].removeprefix("eggrolls-") if e["source"].startswith("eggrolls-") else "例句",
          "display_sentence": example_display_sentence(e, lang)}
         for e in ex_rows
     ]
@@ -179,6 +180,7 @@ def word_to_dict(row, conn: sqlite3.Connection, lang: str = "zh") -> dict:
 
 
 def fetch_word(conn: sqlite3.Connection, word_id: str):
+    word_id = vocab_catalog.resolve_word_id(conn, word_id)
     return conn.execute("SELECT * FROM words WHERE id=?", (word_id,)).fetchone()
 
 
@@ -523,6 +525,7 @@ def study_answer(body: AnswerIn, user: dict = Depends(current_user)):
         w = fetch_word(conn, body.word_id)
         if w is None:
             raise HTTPException(status_code=404, detail="word not found")
+        body.word_id = w["id"]
         row = conn.execute(
             "SELECT easiness, interval, repetitions, fsrs_stability, fsrs_difficulty,"
             " fsrs_state, fsrs_step, fsrs_last_review"
@@ -615,7 +618,7 @@ def quiz_start(body: QuizStartIn, user: dict = Depends(current_user)):
     conn = get_db()
     try:
         if body.word_ids is not None:
-            ids = [i for i in dict.fromkeys(body.word_ids) if i][:50]
+            ids = list(dict.fromkeys(vocab_catalog.resolve_word_id(conn, i) for i in body.word_ids if i))[:50]
             if not ids:
                 raise HTTPException(status_code=400, detail="word_ids is empty")
             placeholders = ",".join("?" for _ in ids)
@@ -938,6 +941,7 @@ def toggle_star(word_id: str, user: dict = Depends(current_user)):
         w = fetch_word(conn, word_id)
         if w is None:
             raise HTTPException(status_code=404, detail="word not found")
+        word_id = w["id"]
         exists = conn.execute(
             "SELECT 1 FROM starred_words WHERE user_id=? AND word_id=?",
             (user["id"], word_id),
@@ -965,6 +969,7 @@ def toggle_star(word_id: str, user: dict = Depends(current_user)):
 def get_star(word_id: str, user: dict = Depends(current_user)):
     conn = get_db()
     try:
+        word_id = vocab_catalog.resolve_word_id(conn, word_id)
         starred = (
             conn.execute(
                 "SELECT 1 FROM starred_words WHERE user_id=? AND word_id=?",
@@ -1098,7 +1103,7 @@ def stats_summary(user: dict = Depends(current_user)):
         conn.close()
 
 
-# ---------------- 单词真人发音 MP3 (v0.7 VOICEVOX) ----------------
+# ---------------- 单词音频：上游录音优先，旧合成语音兜底 ----------------
 
 def _audio_dir() -> Path:
     """AUDIO_DIR 环境变量优先；默认找 backend/data/audio（开发）或 /app/app/data/audio（容器）。"""
@@ -1118,14 +1123,30 @@ def _audio_dir() -> Path:
 
 @app.get("/api/audio/{word_id}.mp3", include_in_schema=False)
 def word_audio(word_id: str):
-    """返回单词真人发音 MP3；不存在则 404（前端 fallback 到浏览器 TTS）。"""
+    """上游音频缓存到 /data，失败时保留合成语音或浏览器 TTS 回退。"""
     # word_id 仅允许安全字符，防止路径穿越
     if not word_id or not all(ch.isalnum() or ch in "-_" for ch in word_id):
         raise HTTPException(status_code=404, detail="not found")
-    p = _audio_dir() / f"{word_id}.mp3"
-    if not p.is_file():
-        raise HTTPException(status_code=404, detail="no audio")
-    return FileResponse(str(p), media_type="audio/mpeg")
+    conn = get_db()
+    try:
+        canonical = vocab_catalog.resolve_word_id(conn, word_id)
+        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name='word_audio_sources'").fetchone()
+        source = conn.execute('SELECT * FROM word_audio_sources WHERE word_id=?', (canonical,)).fetchone() if exists else None
+        if source is not None:
+            try:
+                cached = source_audio.get_audio(dict(source), Path(db_path()).parent / 'audio-cache' / 'eggrolls')
+                return FileResponse(str(cached), media_type='audio/mpeg', headers={'X-Audio-Source': 'eggrolls-original'})
+            except (OSError, ValueError):
+                pass
+        candidates = [word_id, canonical]
+        candidates.extend(r[0] for r in conn.execute('SELECT old_id FROM word_aliases WHERE word_id=?', (canonical,)))
+    finally:
+        conn.close()
+    for candidate in dict.fromkeys(candidates):
+        p = _audio_dir() / f"{candidate}.mp3"
+        if p.is_file():
+            return FileResponse(str(p), media_type="audio/mpeg", headers={'X-Audio-Source': 'legacy-synthesized'})
+    raise HTTPException(status_code=404, detail="no audio")
 
 
 # ---------------- 前端静态托管 (最后挂载) ----------------

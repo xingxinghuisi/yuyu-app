@@ -168,7 +168,8 @@ async function main() {
     await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();
     if(!IN_PROCESS) {
     await page.evaluate(()=>navigator.serviceWorker.ready);
-    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v24-unified-navigation');return (await c.keys()).map(r=>new URL(r.url).pathname);});
+    const shellCache=fs.readFileSync(path.resolve('frontend/sw.js'),'utf8').match(/var CACHE_NAME = '([^']+)'/)[1];
+    const cached=await page.evaluate(async name=>{const c=await caches.open(name);return (await c.keys()).map(r=>new URL(r.url).pathname);},shellCache);
     assert.ok(cached.includes('/map.js')&&cached.includes('/map-model.js')&&cached.includes('/map.css'));
     assert.ok(!cached.some(p=>p.startsWith('/api')));
     await context.setOffline(true);await page.reload();await page.locator('#map-retry').waitFor();

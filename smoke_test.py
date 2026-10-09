@@ -216,8 +216,8 @@ def main():
     # 14. zh display: 中文非空 (v0.6: mt/imported/human 均可), 无回退标记
     s, wzh = api("GET", "/api/vocab?level=N5&limit=1", token=token)
     wz = wzh[0]
-    step("zh meaning_zh mt", s == 200 and bool(wz.get("meaning_zh"))
-         and wz.get("zh_source") in ("mt", "imported", "human", "llm")
+    step("zh meaning_zh from eggrolls", s == 200 and bool(wz.get("meaning_zh"))
+         and wz.get("zh_source") == "eggrolls-anki"
          and wz.get("meaning_is_en_fallback") is False,
          f"{s} {str(wz)[:200]}")
     exs = wz.get("examples") or []
@@ -235,7 +235,7 @@ def main():
     # 15. en display: 显示英文, 无回退
     s, wen = api("GET", "/api/vocab?level=N5&limit=1&lang=en", token=token)
     we = wen[0]
-    step("en display_meaning=en", s == 200 and we.get("display_meaning") == we.get("meaning_en")
+    step("en display_meaning with source fallback", s == 200 and we.get("display_meaning") == (we.get("meaning_en") or we.get("meaning_zh"))
          and we.get("meaning_is_en_fallback") is False, f"{s} {str(we)[:200]}")
 
     # 16. 切回 zh
@@ -258,7 +258,7 @@ def main():
         all(k in b for k in ("id", "name", "category", "total", "studied", "progress"))
         for b in books), "")
     n5b = next(b for b in books if b["id"] == "level-n5") if s == 200 else {}
-    step("books N5 total/progress", n5b.get("total", 0) > 1000 and 0 <= n5b.get("progress", -1) <= 1
+    step("books N5 total/progress", n5b.get("total", 0) == 807 and 0 <= n5b.get("progress", -1) <= 1
          and n5b.get("studied", 0) >= 30, f"{n5b}")
     fn5 = next(b for b in books if b["id"] == "freq-n5") if s == 200 else {}
     step("books freq-n5 total=500", fn5.get("total") == 500, f"{fn5}")
@@ -299,7 +299,7 @@ def main():
     # (回归: 公开 vocab 接口曾无视用户语言设置)
     s, _ = api("PUT", "/api/auth/profile", {"lang": "en"}, token=token)
     s, w_en = api("GET", "/api/vocab?level=N5&limit=1", token=token)
-    step("vocab lang from profile", s == 200 and w_en[0]["display_meaning"] == w_en[0]["meaning_en"],
+    step("vocab lang from profile", s == 200 and w_en[0]["display_meaning"] == (w_en[0]["meaning_en"] or w_en[0]["meaning_zh"]),
          f"{s} {w_en[0] if s == 200 else w_en}")
     s, w_ov = api("GET", "/api/vocab?level=N5&limit=1&lang=zh", token=token)
     step("vocab ?lang= overrides profile", s == 200 and w_ov[0]["display_meaning"] == w_ov[0]["meaning_zh"]
@@ -454,6 +454,21 @@ def main():
     n1book = [b for b in books if b["id"] == "level-n1"] if s == 200 else []
     step("vocab expanded (N1 book > 4000)", bool(n1book) and n1book[0].get("total", 0) > 4000,
          f"{n1book[0].get('total') if n1book else 'no book'}")
+
+    # v1.3: 缓存客户端持有旧 ID 时，读词/评分/收藏/小测均使用新源唯一 ID。
+    legacy_id = "eb1695baf6"
+    s, migrated = api("GET", "/api/vocab/" + legacy_id, token=token)
+    canonical = migrated.get("id")
+    step("legacy ID resolves to eggrolls", s == 200 and canonical and canonical.startswith("eggrolls-"), f"{s}")
+    s, answer = api("POST", "/api/study/answer", {"word_id": legacy_id, "grade": 4}, token=token)
+    step("legacy grade writes canonical ID", s == 200 and answer.get("word_id") == canonical, f"{s}")
+    s, starred = api("POST", "/api/star/" + legacy_id, token=token)
+    step("legacy star writes canonical ID", s == 200 and starred.get("word_id") == canonical, f"{s}")
+    s, star_status = api("GET", "/api/star/" + canonical, token=token)
+    step("canonical star sees legacy toggle", s == 200 and star_status.get("starred") == starred.get("starred"), f"{s}")
+    s, scoped = api("POST", "/api/quiz/start", {"word_ids": [legacy_id, canonical], "count": 3}, token=token)
+    step("quiz aliases deduplicate", s == 200 and len(scoped.get("questions", [])) == 1
+         and scoped["questions"][0]["word_id"] == canonical, f"{s}")
 
     # 11b. v0.7 音频接口: 404 / 200 / 路径穿越
     import os as _os

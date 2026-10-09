@@ -5,6 +5,11 @@ import shutil
 import sqlite3
 from pathlib import Path
 
+if __package__:
+    from . import vocab_catalog
+else:
+    import vocab_catalog
+
 APP_TABLES = """
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -406,6 +411,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         PRIMARY KEY (user_id, word_id))""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_starred_user ON starred_words(user_id, created_at)")
     _migrate_fsrs_columns(conn)
+    vocab_catalog.migrate(conn, find_seed_db())
     _import_books(conn)
     _import_sample_questions(conn)
     _backfill_zh(conn)
@@ -417,6 +423,11 @@ def init_db(data_dir: str | None = None) -> str:
     data_dir = data_dir or os.environ.get("DATA_DIR", "/data")
     os.makedirs(data_dir, exist_ok=True)
     db_path = os.path.join(data_dir, "app.db")
+
+    if os.path.exists(db_path):
+        seed = find_seed_db()
+        if seed is not None:
+            vocab_catalog.backup_before_upgrade(db_path, seed)
 
     if not os.path.exists(db_path):
         seed = find_seed_db()
