@@ -44,9 +44,6 @@ body.map-home::before { background:radial-gradient(ellipse at 15% 4%,#527b9b,tra
 .map-traveler>img { width:100%;height:100%;object-fit:contain;object-position:bottom; }
 .map-sea-name { color:#e3f6ff;opacity:.45; }.map-north { color:#f3f5e4; }
 .anime-quick-course,.anime-progress-strip { display:none; }
-/* v1.3: 蓝色玻璃 tab 栏全局生效（不再仅限 .map-home） */
-.tabbar { background:linear-gradient(120deg,#81aad959,#1839666b);border-color:#fff9;box-shadow:inset 0 1px 0 #fffa,0 8px 22px #051e4a55; }
-.tab.active { background:radial-gradient(ellipse,#f8ce7663,#fff5d60c);box-shadow:inset 0 0 0 1px #f7dfaa7c,0 0 15px #ffdb7a22;color:#ffe4ad; }
 .map-home .tabbar { background:linear-gradient(120deg,#81aad959,#1839666b);border-color:#fff9;box-shadow:inset 0 1px 0 #fffa,0 8px 22px #051e4a55; }
 .map-home .tab.active { background:radial-gradient(ellipse,#f8ce7663,#fff5d60c);box-shadow:inset 0 0 0 1px #f7dfaa7c,0 0 15px #ffdb7a22;color:#ffe4ad; }
 .map-reduced .map-glass { background:linear-gradient(125deg,#456d96,#234871); }
@@ -86,8 +83,6 @@ body.map-paused :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation-play
   .anime-progress-strip { position:fixed;display:flex;align-items:center;gap:10px;left:50%;transform:translateX(-50%);bottom:calc(91px + env(safe-area-inset-bottom));width:calc(100% - 32px);max-width:440px;min-height:54px;padding:10px 15px;border-radius:19px;z-index:55;color:#f8f5ed; }
   .anime-progress-strip>svg { width:26px;height:26px;color:#f7d69c;flex-shrink:0; }.anime-progress-strip>div { flex:1;min-width:0; }.anime-progress-strip b { font-size:12px;font-weight:500; }.anime-progress-strip small { float:right;font-size:10px;color:#dae7f4; }.anime-progress-strip .map-progress { height:6px;margin:7px 0 0; }.anime-progress-strip>a { border-left:1px solid #d7e8fa66;padding-left:13px;color:#f1f4ff;font-size:11px;text-decoration:none;white-space:nowrap; }
   .map-home .tabbar { left:50%;bottom:calc(12px + env(safe-area-inset-bottom));max-width:440px;min-height:66px;border-radius:32px; }.map-home .tab { padding:8px 4px; }.map-home .tab svg { width:23px;height:23px; }
-  /* v1.3: tab 尺寸全局统一 */
-  .tab { padding:8px 4px; }.tab svg { width:23px;height:23px; }
 }
 @media (max-width:360px) { .voyage-intro { padding-left:16px; }.map-brand { font-size:62px; }.map-wordmark { font-size:10px;letter-spacing:3px; }.map-tagline { font-size:12px; }.map-daily { right:10px;width:48%;padding:10px 7px; }.map-daily b { font-size:18px; }.daily-streak .flame { width:19px; }.daily-ring { display:none; }.map-island-label { padding:6px;gap:4px; }.map-island-label strong { font-size:12px; }.map-island-label small { font-size:8px; }.island-seal { width:25px;height:25px; }.anime-quick-course { width:142px;min-height:90px;right:12px;padding:12px; }.anime-quick-course b { font-size:18px; }.anime-quick-course small { font-size:9px; }.anime-quick-course em { font-size:9px; } }
 @media (prefers-reduced-motion:reduce) { .map-home :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation:none!important; } }
