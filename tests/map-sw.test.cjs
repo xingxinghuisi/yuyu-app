@@ -18,7 +18,7 @@ test('authenticated API GETs and writes always use the network, never SW cache',
 });
 test('the offline shell list contains existing map resources',()=>{
   const {context}=worker();
-  for(const file of ['map-model.js','map.js','map.css','map-art.js','anime.css','assets/anime/sea-small.webp','assets/anime/sakura-small.webp','assets/anime/torii-small.webp','assets/anime/fuji-small.webp','assets/anime/maple-small.webp','assets/anime/snow-small.webp','assets/anime/traveler.webp']) {
+  for(const file of ['map-model.js','map.js','map.css','map-art.js','anime.css','map-sheet.css','assets/anime/sea-small.webp','assets/anime/sakura-small.webp','assets/anime/torii-small.webp','assets/anime/fuji-small.webp','assets/anime/maple-small.webp','assets/anime/snow-small.webp','assets/anime/traveler.webp']) {
     assert.ok(context.ASSETS.includes('./'+file));assert.ok(fs.existsSync(path.join('frontend',file)));
   }
 });

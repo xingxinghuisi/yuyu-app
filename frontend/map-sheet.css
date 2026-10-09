@@ -1,0 +1,34 @@
+/* Island details stay outside the document flow, on the native modal layer. */
+html.map-sheet-open { overflow:hidden;overscroll-behavior:none; }
+.map-sheet { position:fixed;inset:auto 0 0;width:min(100%,560px);max-width:560px;max-height:85vh;max-height:85svh;margin:0 auto;padding:0;border:1px solid #deedff80;border-bottom:0;border-radius:28px 28px 0 0;color:#f7f5e9;background:linear-gradient(145deg,#315d82f5,#153a60fa);box-shadow:0 -14px 55px #031c4b66;overflow:hidden; }
+.map-sheet[open] { display:flex;flex-direction:column;animation:map-sheet-in .28s cubic-bezier(.2,.8,.2,1) both; }
+.map-sheet::backdrop { background:#041c385e;animation:map-shade-in .24s ease both; }
+.map-sheet.closing { animation:map-sheet-out .22s ease-in both;pointer-events:none; }
+.map-sheet.closing::backdrop { animation:map-shade-out .22s ease-in both; }
+.map-sheet-bar { position:relative;height:42px;flex-shrink:0;display:flex;align-items:center;justify-content:center; }
+.map-sheet-grip { width:38px;height:4px;border-radius:4px;background:#d0e2f2a6; }
+.map-sheet-close { position:absolute;right:10px;top:5px;width:34px;height:34px;border:0;border-radius:50%;background:#ffffff14;color:#edf6ff;font-size:22px;line-height:1;cursor:pointer; }
+.map-sheet-scroll { overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:0 22px calc(22px + env(safe-area-inset-bottom)); }
+.map-sheet .map-course { padding:0;border:0;border-radius:0;background:none;box-shadow:none;scroll-margin:0; }
+.map-sheet .map-course:focus { outline:none; }
+.map-sheet .map-course h2 { margin-top:8px; }
+.map-sheet .map-course>p[lang] { margin-bottom:18px; }
+.map-sheet .map-shortcuts { grid-template-columns:1fr 1fr;margin-top:18px;gap:10px; }
+.map-sheet .map-shortcuts a { padding:12px 10px;gap:7px; }
+.map-sheet .map-shortcuts svg:last-child { display:none; }
+.map-sheet .map-progress-note { margin-top:14px;font-size:10px; }
+.map-reduced .map-sheet[open],.map-reduced .map-sheet::backdrop { animation:none; }
+@keyframes map-sheet-in { from { transform:translateY(100%); } to { transform:translateY(0); } }
+@keyframes map-sheet-out { from { transform:translateY(0); } to { transform:translateY(100%); } }
+@keyframes map-shade-in { from { background:#041c3800; } to { background:#041c385e; } }
+@keyframes map-shade-out { from { background:#041c385e; } to { background:#041c3800; } }
+@media (max-width:700px) {
+  .map-home .app { padding-bottom:0; }
+  .map-stage { height:100vh;height:100svh;min-height:700px; }
+  .map-world-footer { position:absolute;left:14px;right:auto;top:calc(177px + env(safe-area-inset-top));bottom:auto;min-height:0;padding:0;background:transparent;border:0; }
+  .map-world-footer>span { display:none; }
+  .map-world-footer button { padding:5px 9px;min-height:28px;font-size:9px;background:#1f578350; }
+  .map-world-caption { left:105px;right:auto;top:calc(177px + env(safe-area-inset-top));bottom:auto; }
+  .map-world-caption button { min-height:28px;padding:5px 9px; }
+}
+@media (prefers-reduced-motion:reduce) { .map-sheet[open],.map-sheet::backdrop { animation:none!important; } }

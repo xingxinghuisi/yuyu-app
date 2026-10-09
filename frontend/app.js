@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.2.0';
+var APP_VERSION = '1.2.1';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -433,6 +433,7 @@ function navigate() {
   if (r === 'login' && authed) r = 'home';            // 已登录不再看登录页
   if (currentRoute() !== r) { location.hash = '#/' + r; return; }
   clearTimers();
+  dismissArchipelagoSheet();
   stopAmbientPetals(); // 离开登录页即停止缓飘樱花
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
   window.scrollTo(0, 0);

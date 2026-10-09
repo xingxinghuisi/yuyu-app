@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v21-anime';
+var CACHE_NAME = 'yuyu-v22-island-sheet';
 var ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ var ASSETS = [
   './map.js',
   './map.css',
   './anime.css',
+  './map-sheet.css',
   './map-art.js',
   './assets/anime/sea-small.webp',
   './assets/anime/sakura-small.webp',

@@ -36,8 +36,13 @@ async function main() {
   });
   await context.addInitScript(({token,username})=>{localStorage.setItem('yuyu_token',token);localStorage.setItem('yuyu_username',username);localStorage.setItem('yuyu_theme','light');},{token,username});
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  async function closeSheet() {
+    if(await page.locator('#map-sheet').isVisible()) {await page.locator('#map-sheet-close').click();await page.locator('#map-sheet').waitFor({state:'hidden'});}
+  }
   try {
-    await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();
+    await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();
+    assert.equal(await page.locator('#map-sheet').isVisible(),false);
+    assert.equal(await page.locator('.voyage-log').count(),0);
     assert.equal(await page.locator('[data-island]').count(),5);
     assert.equal(await page.locator('[data-island].locked').count(),4);
     await page.locator('.anime-environment img').evaluateAll(imgs=>Promise.all(imgs.map(img=>img.decode())));
@@ -46,17 +51,21 @@ async function main() {
     const maple = page.locator('[data-scenery="3"]');const mapleBox = await maple.boundingBox();
     await maple.click({position:{x:mapleBox.width*.3,y:mapleBox.height*.6}});
     assert.match(await page.locator('#map-course').innerText(),/红叶岛/);
+    await closeSheet();
     await page.locator('[data-island="2"]').click();
     assert.match(await page.locator('#map-course').innerText(),/富士岛/);
     assert.match(await page.locator('#map-course').innerText(),/从书架自由选级/);
+    await page.keyboard.press('Escape');await page.locator('#map-sheet').waitFor({state:'hidden'});
+    assert.equal(await page.locator('[data-island="2"]').evaluate(el=>el===document.activeElement),true);
     await page.locator('#map-traveler').click();
     await page.locator('#map-start').click();await page.locator('#btn-know').waitFor();
     assert.equal(new URL(page.url()).hash,'#/voyage');
+    assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('map-sheet-open')),false);
     assert.equal(await page.evaluate(()=>StudyCtx.bookId),'level-n5');
     await page.locator('#btn-know').click();
     await page.waitForFunction(()=>ST && ST.done===1);
-    await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();
-    assert.match(await page.locator('.course-count').innerText(),/已学 1 \//);
+    await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();
+    assert.match(await page.locator('.course-count').textContent(),/已学 1 \//);
     const books=await (await client.get('/api/books',{headers})).json();
     assert.equal(books.find(b=>b.id==='level-n5').studied,1);
     console.log('PASS island selection, locks, original study flow, persisted real progress');
@@ -64,10 +73,10 @@ async function main() {
     await page.locator('#map-checkin').click();await page.locator('.poster-overlay').waitFor();
     assert.equal((await (await client.get('/api/home/summary',{headers})).json()).checked_in_today,true);
     await page.locator('#poster-close').click();
-    await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();
+    await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();
     assert.equal(await page.locator('#map-checkin').isDisabled(),true);
     await page.locator('#map-motion').click();assert.equal(await page.locator('#map-motion').getAttribute('aria-pressed'),'true');
-    await page.reload();await page.locator('#map-start').waitFor();assert.equal(await page.locator('#map-motion').getAttribute('aria-pressed'),'true');
+    await page.reload();await page.locator('.voyage-layout').waitFor();assert.equal(await page.locator('#map-motion').getAttribute('aria-pressed'),'true');
     await page.emulateMedia({reducedMotion:'reduce'});
     assert.equal(await page.locator('.traveler-bob').evaluate(el=>getComputedStyle(el).animationName),'none');
     await page.emulateMedia({reducedMotion:'no-preference'});
@@ -77,19 +86,28 @@ async function main() {
     for(const width of [320,390,768,1440]) {
       await page.setViewportSize({width,height:844});
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'overflow at '+width+' '+JSON.stringify(await page.locator('body *').evaluateAll(els=>els.map(el=>({tag:el.tagName,cls:el.className,left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right})).filter(b=>b.right>innerWidth+1&&b.tag!=='svg'&&typeof b.cls==='string').slice(0,12))));
+      if(width<=390) assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight+1),'explore fits viewport');
       for (const kind of ['island','node']) for (let i=0;i<5;i++) {
-        await page.locator('[data-'+kind+'="'+i+'"]').click();
+        const target=page.locator('[data-'+kind+'="'+i+'"]');
+        await target.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));const before=await page.evaluate(()=>scrollY);
+        await target.click();await page.locator('#map-sheet').waitFor();
+        assert.equal(await page.evaluate(()=>scrollY),before,'drawer does not scroll the map '+width+' '+kind+' '+i);
+        assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('map-sheet-open')),true);
         assert.match(await page.locator('#map-course').innerText(),new RegExp(['樱花岛','鸟居岛','富士岛','红叶岛','雪见岛'][i]));
+        await page.mouse.click(5,5);await page.locator('#map-sheet').waitFor({state:'hidden'});
+        assert.equal(await page.evaluate(()=>scrollY),before,'dismiss preserves map position');
       }
       await page.locator('#map-traveler').click();
+      if(width===390) {await page.locator('#map-sheet').evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished)));await page.screenshot({path:path.join(OUT,'sakura-drawer.png')});}
+      await closeSheet();
       for(const target of ['map-island-label','map-node']) {
         const boxes=await page.locator('.'+target).evaluateAll(els=>els.map(el=>{const b=el.getBoundingClientRect();return{x:b.x,right:b.right,width:b.width,height:b.height};}));
         assert.ok(boxes.every(b=>b.x>=0&&b.right<=width+1&&b.width>=40&&b.height>=40),'hit area at '+width+' '+target);
       }
-      if(width===390) { await page.locator('#map-quick-course').click();await page.locator('#btn-know').waitFor();assert.equal(await page.evaluate(()=>StudyCtx.bookId),'level-n5');await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();await page.evaluate(()=>Promise.all([...document.images].map(img=>img.decode().catch(()=>{}))));await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(OUT,'mobile.png'),fullPage:true}); }
+      if(width===390) { await page.locator('#map-quick-course').click();await page.locator('#btn-know').waitFor();assert.equal(await page.evaluate(()=>StudyCtx.bookId),'level-n5');await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();await page.evaluate(()=>Promise.all([...document.images].map(img=>img.decode().catch(()=>{}))));await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(OUT,'mobile.png'),fullPage:true}); }
       if(width===1440) { await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(OUT,'desktop.png'),fullPage:true}); }
     }
-    console.log('PASS responsive 320/390/768/1440; every island and node clickable; course shortcut opens real study');
+    console.log('PASS bottom drawer for all islands/nodes at 320/390/768/1440; backdrop/Escape/close button; focus restored; no map scrolling; compact mobile home');
 
     await page.goto(BASE+'/#/study');await page.locator('.book').first().waitFor();
     await page.locator('.book').first().click();await page.locator('#m-shuffle').click();await page.locator('#btn-know').waitFor();
@@ -101,20 +119,20 @@ async function main() {
     console.log('PASS original shelf/shuffle, review, quiz and profile routes');
 
     // Warm SW must cache the new shell and never authenticated API responses.
-    await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();
+    await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();
     if(!IN_PROCESS) {
     await page.evaluate(()=>navigator.serviceWorker.ready);
-    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v21-anime');return (await c.keys()).map(r=>new URL(r.url).pathname);});
+    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v22-island-sheet');return (await c.keys()).map(r=>new URL(r.url).pathname);});
     assert.ok(cached.includes('/map.js')&&cached.includes('/map-model.js')&&cached.includes('/map.css'));
     assert.ok(!cached.some(p=>p.startsWith('/api')));
     await context.setOffline(true);await page.reload();await page.locator('#map-retry').waitFor();
     assert.match(await page.locator('.map-error').innerText(),/海图暂时没有展开/);
-    await context.setOffline(false);await page.locator('#map-retry').click();await page.locator('#map-start').waitFor();
+    await context.setOffline(false);await page.locator('#map-retry').click();await page.locator('.voyage-layout').waitFor();
     console.log('PASS PWA shell offline, fresh API data, offline error and retry');
     } else {
       await context.route('**/api/books',route=>route.abort());
       await page.reload();await page.locator('#map-retry').waitFor();
-      await context.unroute('**/api/books');await page.locator('#map-retry').click();await page.locator('#map-start').waitFor();
+      await context.unroute('**/api/books');await page.locator('#map-retry').click();await page.locator('.voyage-layout').waitFor();
       console.log('PASS required API failure and retry; SW network/offline test requires real HTTP transport');
     }
     // Slow home requests must not paint over another route.
@@ -127,7 +145,7 @@ async function main() {
     assert.deepEqual(errors,[]);
     console.log('PASS route race, no browser runtime errors');
     await context.addInitScript(()=>Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>2}));
-    await page.goto(BASE+'/#/home');await page.reload();await page.locator('#map-start').waitFor();
+    await page.goto(BASE+'/#/home');await page.reload();await page.locator('.voyage-layout').waitFor();
     assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('map-reduced')),true);
     assert.equal(await page.locator('.anime-environment img').evaluateAll(imgs=>imgs.every(img=>img.src.endsWith('-small.webp')&&!img.srcset)),true);
     console.log('PASS low-end device selects small art and disables effects');
