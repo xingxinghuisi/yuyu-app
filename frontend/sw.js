@@ -1,14 +1,23 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v22';
+var CACHE_NAME = 'yuyu-v23';
 var ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './explore-config.js',
-  './explore-map.js',
-  './explore-map.css',
-  // 海图背景（map-bg 约 450–550KB、map-sky 约 36KB）不预缓存：首次进入探索页时由下方 fetch 运行时缓存
+  './map-model.js',
+  './map.js',
+  './map-art.js',
+  './map.css',
+  './anime.css',
+  // 动漫群岛小图预缓存（首屏快显）；大图与海面按需运行时缓存
+  './assets/anime/sea-small.webp',
+  './assets/anime/sakura-small.webp',
+  './assets/anime/torii-small.webp',
+  './assets/anime/fuji-small.webp',
+  './assets/anime/maple-small.webp',
+  './assets/anime/snow-small.webp',
+  './assets/anime/traveler.webp',
   './manifest.json'
 ];
 
