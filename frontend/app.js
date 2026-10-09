@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.1.0';
+var APP_VERSION = '1.1.2';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -1003,7 +1003,7 @@ function drawMiniIsland(ctx, cx, cy, level) {
 
 /* ================= v1.1: 探索（群岛地图） ================= */
 var EXPLORE_ISLANDS = [
-  { level: 'N1', name: '雪见岛', sub: '嶺上の世界へ', x: 50, y: 9 },
+  { level: 'N1', name: '雪见岛', sub: '最上の雪雲へ', x: 50, y: 8 },
   { level: 'N2', name: '红叶岛', sub: '燃ゆる秋の世界', x: 50, y: 27 },
   { level: 'N3', name: '富士岛', sub: '広がる表現の帯', x: 50, y: 47 },
   { level: 'N4', name: '鸟居岛', sub: 'つながる合間', x: 50, y: 67 },
@@ -1056,6 +1056,8 @@ function renderExplore() {
     var streak = d.streak || 0;
     var learned = d.today_learned || 0;
     var goal = d.daily_goal || 30;
+    // 兜底：异常大值截断显示（避免 445/30 这类困惑）
+    var learnedShow = learned > 999 ? '999+' : String(learned);
     var gpct = goal > 0 ? Math.min(1, learned / goal) : 0;
     var C = 2 * Math.PI * 15;
 
@@ -1068,23 +1070,23 @@ function renderExplore() {
         '</div>';
     }).join('');
 
-    var traveler = cur ? '<div class="traveler" style="left:' + cur.x + '%;top:' + cur.y + '%">🧑‍🎓</div>' : '';
+    // 旅人站在当前岛右侧偏移，不压住标签
+    var traveler = cur ? '<div class="traveler" style="left:calc(' + cur.x + '% + 52px);top:calc(' + cur.y + '% - 14px)">🧑‍🎓</div>' : '';
     var lesson = cur.total > 0 ? (Math.floor(cur.studied / 20) + 1) : 1;
     var cpct = cur.total > 0 ? Math.min(1, cur.studied / cur.total) : 0;
 
     app.innerHTML =
       '<div class="explore-hud">' +
-        '<div class="eh-brand"><div class="eh-logo">语屿</div>' +
-          '<div><div class="eh-name">语屿 <span>KOTOBA</span></div>' +
-          '<div class="eh-slogan">每天十五分钟，筑一座日语之岛。</div></div></div>' +
+        '<div class="eh-brand"><div class="eh-logo">屿</div>' +
+          '<div><div class="eh-name">语屿<span>KOTOBA</span></div>' +
+          '<div class="eh-slogan">每天十五分钟，<br>筑一座日语之岛。</div></div></div>' +
         '<div class="eh-stats">' +
           '<div class="eh-stat"><span class="eh-emoji">🔥</span><div><b>' + streak + '天</b><i>连续打卡</i></div></div>' +
-          '<div class="eh-stat"><svg width="38" height="38" viewBox="0 0 38 38">' +
-            '<circle cx="19" cy="19" r="15" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="5"/>' +
+          '<div class="eh-stat"><svg width="40" height="40" viewBox="0 0 38 38">' +
+            '<circle cx="19" cy="19" r="15" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="5"/>' +
             '<circle cx="19" cy="19" r="15" fill="none" stroke="#ffd98a" stroke-width="5" stroke-linecap="round" ' +
               'stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - gpct)).toFixed(1) + '" transform="rotate(-90 19 19)"/>' +
-            '<text x="19" y="23" font-size="10" text-anchor="middle" fill="#fff" font-weight="700">' + learned + '</text>' +
-          '</svg><div><b>今日目标</b><i>' + learned + '/' + goal + '</i></div></div>' +
+          '</svg><div><b>今日目标</b><i>' + learnedShow + '/' + goal + '</i></div></div>' +
         '</div>' +
       '</div>' +
 
@@ -1093,13 +1095,13 @@ function renderExplore() {
         pills + traveler +
       '</div>' +
 
-      '<div class="explore-course glass">' +
+      '<div class="explore-course">' +
         '<div class="ec-top"><span class="ec-label">当前课程</span>' +
-          '<span class="ec-lesson">第 ' + lesson + ' 课 📖</span></div>' +
+          '<span class="ec-lesson">第 ' + lesson + ' 课<span class="book">📖</span></span></div>' +
         '<div class="ec-island">' + cur.level + ' ' + esc(cur.name) +
           '<span>' + cur.studied + ' / ' + cur.total + ' 词</span></div>' +
         '<div class="ec-bar"><div class="ec-fill" style="width:' + Math.round(cpct * 100) + '%"></div></div>' +
-        '<div class="ec-xp">💎 320 XP <span class="muted">· XP 系统即将上线</span></div>' +
+        '<div class="ec-xp">💎 320 XP<span class="xp-arrow">›</span></div>' +
       '</div>';
 
     $$('.island-pill').forEach(function (p) {
