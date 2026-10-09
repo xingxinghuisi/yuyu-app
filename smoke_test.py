@@ -217,7 +217,7 @@ def main():
     s, wzh = api("GET", "/api/vocab?level=N5&limit=1", token=token)
     wz = wzh[0]
     step("zh meaning_zh mt", s == 200 and bool(wz.get("meaning_zh"))
-         and wz.get("zh_source") in ("mt", "imported", "human")
+         and wz.get("zh_source") in ("mt", "imported", "human", "llm")
          and wz.get("meaning_is_en_fallback") is False,
          f"{s} {str(wz)[:200]}")
     exs = wz.get("examples") or []
