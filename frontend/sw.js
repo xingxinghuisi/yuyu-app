@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v18';
+var CACHE_NAME = 'yuyu-v19';
 var ASSETS = [
   './',
   './index.html',
