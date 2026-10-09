@@ -15,16 +15,14 @@
         completedChapters: complete ? Math.ceil(total / 30) : Math.floor(studied / 30),
         percent: total ? Math.round(studied / total * 100) : 0 };
     });
-    islands.forEach(function (island, i) {
-      // Existing learners may have started any level; never lock their existing book.
-      island.locked = i > 0 && !islands[i - 1].complete && island.studied === 0;
-      island.available = !!island.book && island.total > 0;
-    });
-    var active = islands[0];
+    var previousComplete = true;
     islands.forEach(function (island) {
-      if (island.studied > 0 && !island.complete) active = island;
+      // Shelf progress is preserved, but cannot skip the ordered map journey.
+      island.locked = !previousComplete;
+      island.available = !!island.book && island.total > 0;
+      previousComplete = previousComplete && island.complete;
     });
-    if (active.complete) active = islands.find(function (island) { return !island.complete && !island.locked; }) || islands[4];
+    var active = islands.find(function (island) { return !island.complete && !island.locked; }) || islands[4];
     return { islands: islands, active: active };
   }
   root.KotobaMapModel = { build: build };

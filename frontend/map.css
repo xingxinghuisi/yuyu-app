@@ -5,7 +5,7 @@ body.map-home::before { content: ''; position: fixed; inset: 0; z-index: -1; bac
 .map-home #app.page-enter { animation: map-page-enter .3s ease both; }
 @keyframes map-page-enter { from { opacity: 0; } to { opacity: 1; } }
 .map-home .topbar { display: none; }
-.map-home .tabbar { background: #204e6bc9; border-color: #e4f4f580; color: #fff; box-shadow: inset 0 1px 0 #ffffff77, 0 12px 38px #07273e55; }
+.map-home .tabbar { border-color: #ffffff80; color: #fff; box-shadow: inset 0 1px 0 #ffffff77, 0 12px 38px #07273e55; }
 .map-home .tab { color: #e0edf0; }
 .map-home .tab.active { color: #ffe1a2; background: linear-gradient(120deg,#e9ba6744,#fff1bb15); box-shadow: inset 0 0 0 1px #fff2c44a; }
 .map-home .tabbar.tabbar-auto-hide { opacity: 1; transform: translateX(-50%); pointer-events: auto; }

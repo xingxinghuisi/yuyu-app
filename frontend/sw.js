@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v22-island-sheet';
+var CACHE_NAME = 'yuyu-v23-ordered-islands';
 var ASSETS = [
   './',
   './index.html',

@@ -70,6 +70,30 @@ async function main() {
     assert.equal(books.find(b=>b.id==='level-n5').studied,1);
     console.log('PASS island selection, locks, original study flow, persisted real progress');
 
+    // Real higher-level study must not move the ordered map frontier.
+    const highPlan=await (await client.post('/api/study/plan',{headers,data:{book_id:'level-n1'}})).json();
+    const highAnswer=await client.post('/api/study/answer',{headers,data:{word_id:highPlan.words[0].id,grade:5}});
+    assert.equal(highAnswer.status(),200);
+    await page.reload();await page.locator('.voyage-layout').waitFor();
+    assert.equal(await page.locator('[data-island].locked').count(),4);
+    assert.equal(await page.locator('[data-node="0"]').evaluate(el=>el.classList.contains('current')),true);
+    assert.match(await page.locator('#map-quick-course').innerText(),/N5/);
+    const travelerY=await page.locator('#map-traveler').evaluate(el=>el.getBoundingClientRect().bottom);
+    const startNodeY=await page.locator('[data-node="0"]').evaluate(el=>el.getBoundingClientRect().top);
+    assert.ok(Math.abs(travelerY-startNodeY)<30,'traveler stays beside N5 node');
+    await page.locator('[data-island="4"]').click();
+    assert.equal(await page.locator('#map-start').count(),0);
+    assert.match(await page.locator('.course-count').innerText(),/已学 1 \//);
+    await closeSheet();
+    const latestBooks=await (await client.get('/api/books',{headers})).json();
+    await context.route('**/api/books',route=>route.fulfill({json:latestBooks.map(b=>b.id==='level-n1'?{...b,studied:b.total}:b)}));
+    await page.reload();await page.locator('.voyage-layout').waitFor();
+    assert.equal(await page.locator('[data-island="4"].locked').count(),1);
+    assert.equal(await page.locator('[data-node="4"].complete').count(),0);
+    await context.unroute('**/api/books');
+    await page.reload();await page.locator('.voyage-layout').waitFor();
+    console.log('PASS real N1 study preserved; N5 traveler/course remain current; out-of-order completion stays visibly locked');
+
     await page.locator('#map-checkin').click();await page.locator('.poster-overlay').waitFor();
     assert.equal((await (await client.get('/api/home/summary',{headers})).json()).checked_in_today,true);
     await page.locator('#poster-close').click();
@@ -116,13 +140,16 @@ async function main() {
     assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('map-home')),false);
     await page.goto(BASE+'/#/quiz');await page.locator('#btn-quiz-start').waitFor();
     await page.goto(BASE+'/#/me');await page.locator('a[href="#/me/study"]').waitFor();
+    await page.setViewportSize({width:390,height:844});
+    await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));
+    await page.screenshot({path:path.join(OUT,'profile-glass.png')});
     console.log('PASS original shelf/shuffle, review, quiz and profile routes');
 
     // Warm SW must cache the new shell and never authenticated API responses.
     await page.goto(BASE+'/#/home');await page.locator('.voyage-layout').waitFor();
     if(!IN_PROCESS) {
     await page.evaluate(()=>navigator.serviceWorker.ready);
-    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v22-island-sheet');return (await c.keys()).map(r=>new URL(r.url).pathname);});
+    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v23-ordered-islands');return (await c.keys()).map(r=>new URL(r.url).pathname);});
     assert.ok(cached.includes('/map.js')&&cached.includes('/map-model.js')&&cached.includes('/map.css'));
     assert.ok(!cached.some(p=>p.startsWith('/api')));
     await context.setOffline(true);await page.reload();await page.locator('#map-retry').waitFor();
@@ -148,6 +175,8 @@ async function main() {
     await page.goto(BASE+'/#/home');await page.reload();await page.locator('.voyage-layout').waitFor();
     assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('map-reduced')),true);
     assert.equal(await page.locator('.anime-environment img').evaluateAll(imgs=>imgs.every(img=>img.src.endsWith('-small.webp')&&!img.srcset)),true);
+    await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));
+    await page.screenshot({path:path.join(OUT,'mobile-low-detail.png')});
     console.log('PASS low-end device selects small art and disables effects');
     fs.writeFileSync(path.join(OUT,'session.json'),JSON.stringify({username,token}));
     console.log('Screenshots: '+OUT);

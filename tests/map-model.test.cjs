@@ -17,9 +17,26 @@ test('a completed book unlocks the next island', () => {
   const m=build(books([95])); assert.equal(m.active.level,'N4');
   assert.equal(m.islands[0].completedChapters,4); assert.equal(m.islands[1].locked,false);
 });
-test('existing higher-level learning remains accessible without completing N5', () => {
-  const m=build(books([3,0,36])); assert.equal(m.active.level,'N3');
-  assert.equal(m.active.locked,false); assert.equal(m.active.chapter,2);
+test('higher-level study preserves counts without unlocking or moving the traveler', () => {
+  const m=build(books([3,0,36,0,12])); assert.equal(m.active.level,'N5');
+  assert.deepEqual(m.islands.map(i=>i.locked),[false,true,true,true,true]);
+  assert.equal(m.islands[2].studied,36); assert.equal(m.islands[2].chapter,2);
+  assert.equal(m.islands[4].studied,12);
+});
+
+test('every frontier advances strictly from N5 through N1', () => {
+  for(let frontier=0;frontier<5;frontier++) {
+    const m=build(books(Array.from({length:5},(_,i)=>i<frontier?95:3)));
+    assert.equal(m.active.level,['N5','N4','N3','N2','N1'][frontier]);
+    assert.deepEqual(m.islands.map(i=>i.locked),Array.from({length:5},(_,i)=>i>frontier));
+  }
+});
+
+test('a completed higher book cannot unlock islands past an earlier gap', () => {
+  const m=build(books([3,95,0,95,95]));
+  assert.equal(m.active.level,'N5');
+  assert.ok(m.islands.slice(1).every(i=>i.locked));
+  assert.equal(m.islands[4].complete,true,'existing completion data is preserved');
 });
 test('counts, rather than rounded API percentages, decide completion', () => {
   const b=books([94]); b[0].progress=1;
