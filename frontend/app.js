@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '0.8.0';
+var APP_VERSION = '0.8.1';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -311,6 +311,8 @@ function speak(text, wordId) {
   if (wordId) {
     var a = new Audio('/api/audio/' + encodeURIComponent(wordId) + '.mp3');
     _audioEl = a;
+    /* v0.8.1: 真人 MP3 也服从「我的页→发音设置→语速》(默认 0.8x) */
+    try { a.playbackRate = getVoicePref().rate || 1; } catch (e) {}
     a.onended = function () { if (_audioEl === a) _audioEl = null; };
     a.onerror = function () { if (_audioEl === a) { _audioEl = null; speakTts(text); } };
     try { a.play().catch(function () { speakTts(text); }); } catch (e) { speakTts(text); }
@@ -345,7 +347,7 @@ function initVoiceSettings() {
   sel.addEventListener('change', function () {
     try { localStorage.setItem('yuyu_voice', sel.value); } catch (e) {}
   });
-  if (test) test.addEventListener('click', function () { speak('こんにちは、語屿です'); });
+  if (test) test.addEventListener('click', function () { speak('かける', 'jlpt10k-00377'); });
 }
 
 /* ================= 4. API 封装 ================= */
@@ -2122,7 +2124,7 @@ function renderMe() {
       '<h3>发音设置</h3>' +
       '<div style="margin-bottom:10px"><label class="muted" style="font-size:13px">发音人</label>' +
       '<select id="sel-voice" class="input" style="width:100%;margin-top:4px"><option value="">系统默认</option></select></div>' +
-      '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span></label>' +
+      '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span> <span class="muted" style="font-size:11px">（真人发音 · 系统 TTS 均适用）</span></label>' +
       '<input type="range" id="range-rate" min="0.5" max="1.2" step="0.1" value="0.8" style="width:100%">' +
       '<div style="display:flex;justify-content:space-between;font-size:11px" class="muted"><span>慢</span><span>快</span></div></div>' +
       '<button class="btn btn-ghost btn-sm" id="btn-voice-test" style="margin-top:8px">试听</button>' +
