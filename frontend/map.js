@@ -47,8 +47,8 @@ function renderArchipelago() {
     // v1.3 一屏群岛：HUD + 群岛（flex:1）+ 课程条，零滚动；岛屿详情进底部抽屉
     app.innerHTML = '<div class="voyage-layout onescreen">'
       + '<header class="voyage-intro compact"><div class="os-brand"><h1>语屿 <span>KOTOBA</span></h1><p>每天十五分钟，筑一座日语之岛。</p></div>'
-      + '<div class="os-hud"><div class="os-stat"><span>\U0001F525</span><div><b>' + (summary.streak||0) + '天</b><i>连续打卡</i></div></div>'
-      + '<div class="os-stat"><span>\U0001F3AF</span><div><b>' + learned + '/' + goal + '</b><i>今日目标</i></div></div></div></header>'
+      + '<div class="os-hud"><div class="os-stat"><span>🔥</span><div><b>' + (summary.streak||0) + '天</b><i>连续打卡</i></div></div>'
+      + '<div class="os-stat"><span>🎯</span><div><b>' + learned + '/' + goal + '</b><i>今日目标</i></div></div></div></header>'
       + '<section class="voyage-world" aria-label="日语学习群岛地图"><div class="map-stage onescreen-stage">' + mapScenery()
       + '<div class="map-controls">' + nodes + labels + '</div>'
       + '<button id="map-traveler" class="map-traveler" style="--x:' + p.travelX + '%;--y:' + p.travelY + '%" aria-label="旅人，查看当前学习航段">' + mapTraveler() + '</button>'
