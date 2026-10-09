@@ -1161,3 +1161,69 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 .stats-canvas { width: 100%; height: auto; display: block; margin-top: 8px; }
 .stats-legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
 .stats-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; }
+
+/* ============ v1.0 过渡动画 ============ */
+/* 路由级页面进入：右滑入 + 淡入（iOS push 风格） */
+@keyframes page-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+#app.page-enter { animation: page-in .3s cubic-bezier(0.32,0.72,0,1); }
+
+/* 列表 stagger 入场：依次淡入上浮 */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.stagger-item {
+  animation: rise-in .4s cubic-bezier(0.32,0.72,0,1) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+/* 单词卡进入：从右滑入 */
+@keyframes card-in {
+  from { opacity: 0; transform: translateX(48px) scale(.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.card-enter { animation: card-in .3s cubic-bezier(0.32,0.72,0,1); }
+
+/* 复习揭晓：弹性回弹 */
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(.96); }
+  60% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.pop-in { animation: pop-in .35s cubic-bezier(0.32,0.72,0,1); }
+
+/* 骨架屏 shimmer */
+@keyframes skel-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skel-wrap { display: flex; flex-direction: column; gap: 12px; padding: 4px 0; }
+.skel {
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(120,120,128,.14) 25%, rgba(120,120,128,.06) 50%, rgba(120,120,128,.14) 75%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s linear infinite;
+}
+.skel-title { height: 28px; width: 45%; }
+.skel-card { padding: 16px; }
+.skel-card .skel-line { height: 16px; margin-bottom: 10px; }
+.skel-card .skel-line.short { width: 60%; margin-bottom: 0; }
+html[data-theme="dark"] .skel {
+  background: linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.12) 50%, rgba(255,255,255,.06) 75%);
+  background-size: 200% 100%;
+}
+
+/* 按钮按压统一（已有的 .btn:active 保留，这里补 task-card） */
+.task-card:active { transform: scale(.96); }
+
+/* 尊重减少动态偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
