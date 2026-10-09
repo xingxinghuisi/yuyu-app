@@ -190,6 +190,16 @@ html[data-theme="dark"] .icon-sun { display: none; }
   opacity: 0;
   pointer-events: none;
 }
+/* v1.0.2: 全屏路由（学习/复习/考试）底栏完全隐藏 */
+body.tabbar-full-hide .tabbar {
+  transform: translateX(-50%) translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+}
+/* v1.0.2: 全屏时内容区不再为底栏留白 */
+body.tabbar-full-hide .app {
+  padding-bottom: 28px;
+}
 @media (prefers-reduced-motion: reduce) {
   .tabbar { transition: none; }
 }
