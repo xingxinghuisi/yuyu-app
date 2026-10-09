@@ -262,6 +262,40 @@ def _backfill_zh(conn: sqlite3.Connection) -> None:
         conn.execute("DETACH seed")
 
 
+def _upgrade_zh_llm(conn: sqlite3.Connection) -> None:
+    """v0.9: 用种子库的 LLM 改进中文覆盖老库的机翻中文 (幂等)。
+
+    只覆盖 zh_source='mt' 的行（旧机翻），'human'（人工校对）和已是 'llm' 的永不覆盖。
+    """
+    seed = find_seed_db()
+    if seed is None:
+        return
+    cols = _column_names(conn, "words")
+    if "meaning_zh" not in cols or "zh_source" not in cols:
+        return
+    conn.commit()
+    conn.execute(f"ATTACH DATABASE 'file:{seed}?mode=ro' AS seed")
+    try:
+        seed_cols = {r[1] for r in conn.execute("PRAGMA seed.table_info(words)")}
+        if "meaning_zh" not in seed_cols or "zh_source" not in seed_cols:
+            return
+        cur = conn.execute("""
+            UPDATE words
+            SET meaning_zh = (SELECT s.meaning_zh FROM seed.words s WHERE s.id = words.id),
+                zh_source = 'llm'
+            WHERE zh_source = 'mt'
+              AND EXISTS (SELECT 1 FROM seed.words s
+                          WHERE s.id = words.id AND s.zh_source = 'llm'
+                          AND s.meaning_zh IS NOT NULL AND s.meaning_zh != '')
+        """)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("DETACH seed")
+
+
 def _backfill_example_zh(conn: sqlite3.Connection) -> None:
     """v0.4.2: 用种子库的 sentence_zh 补齐已有 examples 行的例句中文 (幂等)。
 
@@ -375,6 +409,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _import_books(conn)
     _import_sample_questions(conn)
     _backfill_zh(conn)
+    _upgrade_zh_llm(conn)
     _backfill_example_zh(conn)
 
 
