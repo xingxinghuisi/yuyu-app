@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '0.9.0';
+var APP_VERSION = '1.0.0';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -431,10 +431,38 @@ function navigate() {
   window.scrollTo(0, 0);
   setChrome(r);
   routes[r]();
+  // v1.0: 路由级页面进入动画（右滑入+淡入）
+  pageEnter();
+}
+
+/* 页面进入动画：CSS animation，结束后移除 class */
+function pageEnter() {
+  var el = $('#app');
+  if (!el) return;
+  // 减少动态偏好则跳过
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  } catch (e) {}
+  el.classList.remove('page-enter');
+  void el.offsetWidth; // 强制 reflow 以重启动画
+  el.classList.add('page-enter');
+  var done = function () {
+    el.classList.remove('page-enter');
+    el.removeEventListener('animationend', done);
+  };
+  el.addEventListener('animationend', done);
+  // 兜底：500ms 后强制移除
+  setTimeout(function () { el.classList.remove('page-enter'); }, 500);
 }
 
 function loadingHtml(text) {
-  return '<div class="loading"><div class="spin"></div>' + esc(text || '加载中…') + '</div>';
+  // v1.0: 骨架屏（shimmer），替代纯文字 loading
+  return '<div class="skel-wrap" role="status" aria-label="' + esc(text || '加载中') + '">' +
+    '<div class="skel skel-title"></div>' +
+    '<div class="glass skel-card"><div class="skel skel-line"></div><div class="skel skel-line short"></div></div>' +
+    '<div class="glass skel-card"><div class="skel skel-line"></div><div class="skel skel-line short"></div></div>' +
+    '<div class="glass skel-card"><div class="skel skel-line"></div><div class="skel skel-line short"></div></div>' +
+  '</div>';
 }
 
 /* ================= 6. 页面：登录 ================= */
@@ -987,7 +1015,7 @@ function renderShelf(books, summary, isl) {
              books: list.filter(function (b) { return (b.category || 'level') === c.key; }) };
   }).filter(function (g) { return g.books.length > 0; });
 
-  function cardHtml(b) {
+  function cardHtml(b, idx) {
     var pct = 0;
     if (typeof b.progress === 'number') pct = b.progress;
     else if (b.total > 0) pct = (b.studied || 0) / b.total;
@@ -995,7 +1023,7 @@ function renderShelf(books, summary, isl) {
     var countTxt = hasData
       ? ((b.studied != null ? b.studied : 0) + ' / ' + (b.total != null ? b.total : '—'))
       : '— / —';
-    return '<button class="book glass' + (StudyCtx.bookId === b.id ? ' current' : '') + '" data-bid="' + esc(b.id) + '" data-bname="' + esc(b.name) + '">' +
+    return '<button class="book glass stagger-item' + (StudyCtx.bookId === b.id ? ' current' : '') + '" style="--i:' + Math.min(idx || 0, 11) + '" data-bid="' + esc(b.id) + '" data-bname="' + esc(b.name) + '">' +
       '<div class="book-main">' +
         '<span class="book-lv">' + esc(b.name) + '</span>' +
         (b.description ? '<span class="book-desc">' + esc(b.description) + '</span>' : '') +
@@ -1205,7 +1233,7 @@ function renderStudyWord() {
   }
 
   app.innerHTML = studyProgressHtml('学习 · 展示') + nav +
-    '<div id="word-card-zone">' + wordCardHtml(w, true) + '</div>' +
+    '<div id="word-card-zone" class="card-enter">' + wordCardHtml(w, true) + '</div>' +
     exampleHtml(w) +
     '<div style="margin-top:10px"><button class="btn btn-ghost" id="btn-detail" style="width:100%">查看详解 · 音形义用记</button></div>' +
     '<div id="study-actions" style="margin-top:16px">' + actions + '</div>';
@@ -1465,8 +1493,8 @@ function refreshStarredList() {
         '<a href="#/study" class="btn btn-primary" style="text-decoration:none">去背词</a></div>';
     } else {
       h += '<button class="btn btn-primary" id="btn-starred-review" style="width:100%;margin-bottom:6px">复习生词（' + total + '）</button>';
-      h += '<div class="starred-list">' + items.map(function (w) {
-        return '<div class="glass starred-item">' +
+      h += '<div class="starred-list">' + items.map(function (w, idx) {
+        return '<div class="glass starred-item stagger-item" style="--i:' + Math.min(idx, 11) + '">' +
           '<span class="mastery-dot mastery-' + (w.mastery || 0) + '" title="' + masteryLabel(w.mastery || 0) + '"></span>' +
           '<div style="flex:1;min-width:0" data-act="detail" data-wid="' + esc(w.id) + '">' +
             '<div class="sk">' + esc(w.kanji || w.kana) + '</div>' +
@@ -1583,7 +1611,7 @@ function renderReviewCard() {
     '<div class="quiz-progress"><div class="bar"><i style="width:' +
     Math.round(RV.idx / RV.words.length * 100) + '%"></i></div>' +
     '<div class="txt">' + (RV.idx + 1) + ' / ' + RV.words.length + ' · 复习翻牌</div></div>' + nav +
-    '<div class="glass word-card" id="review-card">' +
+    '<div class="glass word-card card-enter" id="review-card">' +
       starBtnHtml(w.id) +
       '<div class="word-kanji">' + wordFaceRuby(w) + '</div>' +
       (w.romaji ? '<div class="word-romaji">' + esc(w.romaji) + '</div>' : '') +
@@ -1616,7 +1644,9 @@ function renderReviewCard() {
         RV.grades[w.id] = grade;
         RV.done++;
         if (grade === 5) celebrate();
-        $('#review-back').classList.remove('hidden');
+        var rbk = $('#review-back');
+        rbk.classList.remove('hidden');
+        rbk.classList.add('pop-in'); // v1.0: 揭晓弹性回弹
         $('#grade-btns').classList.add('hidden');
         $('#rv-actions').innerHTML = nextHtml;
         $('#btn-rv-next').addEventListener('click', function () {
@@ -1955,8 +1985,8 @@ function renderQuizResult(r) {
 
     (wrong.length ?
       '<h3 style="margin:4px 2px 12px">错题本 <span class="muted" style="font-weight:400;font-size:13px">' + wrong.length + ' 题</span></h3>' +
-      '<div class="wrong-list">' + wrong.map(function (it) {
-        return '<div class="glass wrong-item"><div class="w">' + esc(it.word || '') +
+      '<div class="wrong-list">' + wrong.map(function (it, idx) {
+        return '<div class="glass wrong-item stagger-item" style="--i:' + Math.min(idx, 11) + '"><div class="w">' + esc(it.word || '') +
           (it.kana ? ' <span class="muted" style="font-size:13px;font-weight:400">' + esc(it.kana) + '</span>' : '') +
           '</div><div class="m">' + esc(it.meaning || it.display_meaning || '') + '</div></div>';
       }).join('') + '</div>' +
