@@ -226,3 +226,43 @@ html[data-theme="dark"] .map-home .archipelago-art { filter: brightness(.78) sat
 @media (prefers-reduced-motion: reduce) {
   .onescreen .map-traveler .traveler-bob { animation: none; }
 }
+
+/* ===== v1.3.1: 一屏群岛布局修复 ===== */
+.voyage-layout.onescreen {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+.voyage-layout.onescreen > .voyage-intro.compact {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 12px 16px 8px !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+.voyage-layout.onescreen > .voyage-world {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  padding: 0 !important;
+}
+.voyage-layout.onescreen .map-stage.onescreen-stage {
+  flex: 1 !important;
+  position: relative !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+  margin: 0 12px !important;
+}
+.voyage-layout.onescreen > .course-bar {
+  flex: 0 0 auto !important;
+  margin: 10px 12px calc(90px + env(safe-area-inset-bottom)) !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
