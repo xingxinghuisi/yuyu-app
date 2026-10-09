@@ -154,3 +154,75 @@ html[data-theme="dark"] .map-home .archipelago-art { filter: brightness(.78) sat
 @media (prefers-reduced-motion: reduce) { .map-home *, .map-home *::before { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @supports not (aspect-ratio: 1) { .map-stage { height: 0; padding-bottom: 141.6667%; } }
 @supports not (backdrop-filter: blur(1px)) { .map-glass { background: #2c607b; }.map-island-label { background: #f3f4e8; } }
+
+/* ============ v1.3: 一屏群岛 ============ */
+.voyage-layout.onescreen {
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  max-height: 100vh; max-height: 100dvh;
+  overflow: hidden; gap: 0;
+}
+/* 紧凑 HUD */
+.voyage-intro.compact {
+  flex-shrink: 0; padding: 14px 18px 8px;
+  display: flex; justify-content: space-between; align-items: center;
+  z-index: 10;
+}
+.os-brand h1 { font-size: 22px; font-weight: 800; letter-spacing: 1px; color: #fff; }
+.os-brand h1 span { font-size: 12px; font-weight: 400; letter-spacing: 3px; opacity: .6; }
+.os-brand p { font-size: 11px; opacity: .55; margin-top: 2px; }
+.os-hud { display: flex; gap: 8px; }
+.os-stat {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.1); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 6px 10px;
+}
+.os-stat > span { font-size: 16px; }
+.os-stat b { font-size: 14px; color: #ffd98a; }
+.os-stat i { font-size: 10px; font-style: normal; opacity: .6; }
+/* 一屏群岛舞台 */
+.voyage-world { flex: 1; min-height: 0; display: flex; }
+.map-stage.onescreen-stage {
+  flex: 1; min-height: 0; position: relative;
+  aspect-ratio: auto !important; height: auto !important;
+  border-radius: 20px; overflow: hidden; margin: 0 12px;
+  isolation: isolate;
+}
+/* 底部课程条 */
+.course-bar {
+  flex-shrink: 0; margin: 10px 12px calc(96px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 16px;
+}
+.cb-info { flex: 1; min-width: 0; }
+.cb-info b { font-size: 14px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+.cb-info > span { font-size: 11px; opacity: .65; color: #e8f0f2; }
+.cb-info .map-progress { height: 6px; margin: 6px 0 0; }
+.cb-go {
+  flex-shrink: 0; border: none; cursor: pointer; font-family: inherit;
+  background: linear-gradient(135deg, #ffd98a, #ff9d5c); color: #1a1a2e;
+  border-radius: 12px; padding: 12px 18px; font-weight: 700; font-size: 14px;
+}
+.cb-go:active { transform: scale(.96); }
+/* 一屏下隐藏旧元素 */
+.onescreen .map-world-caption,
+.onescreen .map-sea-name,
+.onescreen .map-north,
+.onescreen .map-world-footer,
+.onescreen .anime-quick-course,
+.onescreen .anime-progress-strip { display: none !important; }
+/* 一屏岛屿标签：小 pill */
+.onescreen .map-island-label {
+  min-height: 0; padding: 5px 10px 5px 6px; gap: 5px; border-radius: 12px;
+}
+.onescreen .map-island-label strong { font-size: 11px; }
+.onescreen .map-island-label small { display: none; }
+.onescreen .island-seal { width: 20px; height: 20px; }
+.onescreen .island-seal svg { width: 12px; height: 12px; }
+.onescreen .map-island-label.open { border-color: #ffd98a; box-shadow: 0 0 0 2px #ffd98a55, 0 4px 14px rgba(0,0,0,.25); }
+.onescreen .map-node { display: none; }
+/* 旅人 */
+.onescreen .map-traveler { width: 56px; height: 88px; }
+@media (prefers-reduced-motion: reduce) {
+  .onescreen .map-traveler .traveler-bob { animation: none; }
+}
