@@ -154,6 +154,7 @@ function mtBadge(w) {
 /* ================= 2. 樱花粒子 ================= */
 /* 答对时全屏撒 24 片花瓣 */
 function sakuraBurst(count) {
+  if (typeof mapMotionReduced === 'function' && mapMotionReduced()) return;
   var n = count || 24;
   var cv = $('#sakura-canvas');
   var ctx = cv.getContext('2d');
@@ -220,6 +221,7 @@ function celebrate() {
 /* 登录页常驻缓飘樱花（与 sakuraBurst 共用全屏画布，低速低透明度） */
 var ambientOn = false;
 function startAmbientPetals() {
+  if (typeof mapMotionReduced === 'function' && mapMotionReduced()) return;
   if (ambientOn) return;
   ambientOn = true;
   var cv = $('#sakura-canvas');
@@ -406,6 +408,7 @@ function currentRoute() {
 var routes = {}; // 下方各页面注册
 
 function setChrome(route) {
+  document.body.classList.toggle('map-home', route === 'home');
   var authed = !!getToken();
   var inApp = authed && route !== 'login';
   $('#topbar').classList.toggle('hidden', !inApp);
@@ -764,106 +767,7 @@ function islandCardHtml(isl) {
 }
 
 function renderHome() {
-  app.innerHTML = loadingHtml('正在眺望你的岛屿…');
-  Promise.all([
-    api('/home/summary'),
-    api('/island').catch(function () { return null; }),
-    api('/starred?per_page=1').catch(function () { return null; })
-  ]).then(function (res) {
-    var d = res[0] || {};
-    var isl = res[1];
-    var starredTotal = (res[2] && res[2].total) || 0;
-    var username = d.username || localStorage.getItem('yuyu_username') || '';
-    var learned = d.today_learned || 0;
-    var goal = d.daily_goal || 30;
-    var due = d.review_due || 0;
-    var streak = d.streak || 0;
-    var checked = !!d.checked_in_today;
-    var pct = Math.min(1, goal > 0 ? learned / goal : 0);
-    var C = 2 * Math.PI * 48;
-
-    app.innerHTML =
-      '<div class="greet"><h2>' + esc(greeting()) + '，' + esc(username) + '</h2>' +
-      '<p>今天也要为小岛添一块砖。</p></div>' +
-
-      (isl ? islandCardHtml(isl) : '') +
-
-      '<div class="glass progress-ring-card">' +
-        '<div class="ring-wrap">' +
-          '<svg width="110" height="110" viewBox="0 0 110 110">' +
-            '<circle class="ring-bg" cx="55" cy="55" r="48" fill="none" stroke-width="10"/>' +
-            '<circle class="ring-fg" cx="55" cy="55" r="48" fill="none" stroke-width="10" ' +
-              'stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '"/>' +
-          '</svg>' +
-          '<div class="ring-center"><b>' + learned + '</b><span>/ ' + goal + ' 今日已学</span></div>' +
-        '</div>' +
-        '<div><h3>今日进度</h3><p class="muted" style="font-size:13px;margin:6px 0 0">每天十五分钟，<br>筑一座日语之岛。</p></div>' +
-      '</div>' +
-
-      '<div class="task-grid">' +
-        '<div class="glass task-card" id="go-study">' +
-          '<div class="num">' + learned + '<span class="muted" style="font-size:14px">/' + goal + '</span></div>' +
-          '<div class="label">新词</div><div class="go">去学习 →</div>' +
-        '</div>' +
-        '<div class="glass task-card" id="go-review">' +
-          '<div class="num">' + due + '</div>' +
-          '<div class="label">待复习</div><div class="go">去复习 →</div>' +
-        '</div>' +
-        '<div class="glass task-card" id="go-starred">' +
-          '<div class="num">' + starredTotal + '</div>' +
-          '<div class="label">生词本</div><div class="go">去复习 →</div>' +
-        '</div>' +
-      '</div>' +
-
-      '<div class="glass checkin-card">' +
-        '<div class="streak">' + FLAME_SVG + '<b>' + streak + '</b><span>天连续打卡</span></div>' +
-        (checked
-          ? '<button class="btn btn-ghost" disabled style="width:100%">今日已打卡</button>'
-          : '<button class="btn btn-primary" id="btn-checkin">打卡今日学习</button>') +
-      '</div>';
-
-    // 进度环动画
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        var fg = $('.ring-fg');
-        if (fg) fg.style.strokeDashoffset = (C * (1 - pct)).toFixed(1);
-      });
-    });
-
-    $('#go-study').addEventListener('click', function () { location.hash = '#/study'; });
-    $('#go-review').addEventListener('click', function () { location.hash = '#/review'; });
-    var gs = $('#go-starred');
-    if (gs) gs.addEventListener('click', function () { location.hash = '#/starred'; });
-    var cb = $('#btn-checkin');
-    if (cb) cb.addEventListener('click', function () {
-      cb.disabled = true; cb.textContent = '打卡中…';
-      api('/checkin', 'POST').then(function (r) {
-        celebrate();
-        var newStreak = (r.streak != null ? r.streak : streak + 1);
-        toast('打卡成功，连续 ' + newStreak + ' 天');
-        // 拉岛屿与今日数据，生成打卡海报
-        Promise.all([
-          api('/island').catch(function () { return null; }),
-          api('/home/summary').catch(function () { return null; })
-        ]).then(function (res) {
-          renderHome();
-          showPoster({
-            streak: newStreak,
-            todayLearned: (res[1] && res[1].today_learned) || learned,
-            totalWords: (res[0] && res[0].total_words) || 0,
-            islandLevel: (res[0] && res[0].level) || 1,
-            islandName: (res[0] && res[0].level_name) || '沙洲'
-          });
-        });
-      }).catch(function (err) {
-        toast(err.message || '打卡失败');
-        cb.disabled = false; cb.textContent = '打卡今日学习';
-      });
-    });
-  }).catch(function (err) {
-    app.innerHTML = '<div class="loading">加载失败：' + esc(err.message) +
-      '<br><br><button class="btn btn-ghost" onclick="location.reload()">重试</button></div>';
-  });
+  renderArchipelago();
 }
 /* ---------------- 打卡海报 ----------------
    Canvas 绘制 750x1200 海报：日期、今日学词、连续打卡、岛屿等级、slogan */
@@ -1118,6 +1022,15 @@ function renderExplore() {
 }
 
 routes['home'] = renderHome;
+// v1.2 动漫群岛：从岛屿直接进入背词流；map.js 里 startIsland() 跳转到 #/voyage
+routes['voyage'] = function () {
+  if (!mapVoyageBook) { location.hash = '#/study'; return; }
+  StudyCtx.bookId = mapVoyageBook.id;
+  StudyCtx.bookName = mapVoyageBook.name;
+  StudyCtx.order = 'seq';
+  mapVoyageBook = null;
+  startStudyFlow();
+};
 // v1.2: 优先使用 explore-map.js 的竖向群岛海图；未加载时回退旧版
 routes['explore'] = window.renderExploreMap || renderExplore;
 
