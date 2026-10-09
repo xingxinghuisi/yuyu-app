@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.0.1';
+var APP_VERSION = '1.0.2';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -432,6 +432,9 @@ function navigate() {
   setChrome(r);
   // v1.0.1: 路由切换时底栏重置为显示状态
   if (typeof tabbarAutoHide !== 'undefined') tabbarAutoHide.reset();
+  // v1.0.2: 学习/复习/考试全屏——底栏完全隐藏，退出到其他路由后恢复
+  var FULLSCREEN_ROUTES = { study: 1, review: 1, quiz: 1 };
+  document.body.classList.toggle('tabbar-full-hide', !!FULLSCREEN_ROUTES[r]);
   routes[r]();
   // v1.0: 路由级页面进入动画（右滑入+淡入）
   pageEnter();
@@ -485,7 +488,9 @@ var tabbarAutoHide = (function () {
       ticking = false;
       var y = window.scrollY || window.pageYOffset || 0;
       var t = el();
-      if (t && !t.classList.contains('hidden')) {
+      // v1.0.2: 全屏路由下底栏已完全隐藏，scroll 逻辑不生效
+      var fs = document.body.classList.contains('tabbar-full-hide');
+      if (t && !t.classList.contains('hidden') && !fs) {
         if (y <= 0) { show(); downStart = 0; }
         else if (y > lastY) { // 向下滚动
           if (downStart === 0) downStart = lastY;
