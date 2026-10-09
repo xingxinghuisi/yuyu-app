@@ -1,0 +1,90 @@
+/* Immersive anime art direction; interaction and data stay in map.js. */
+body.map-home { background:#063b68; }
+body.map-home::before { background:radial-gradient(ellipse at 15% 4%,#527b9b,transparent 55%),linear-gradient(130deg,#0f537c,#082a50); }
+.map-home .app { max-width:1240px;padding:32px 32px 120px; }
+.voyage-layout { grid-template-columns:minmax(0,760px) minmax(250px,320px);gap:0 32px; }
+.voyage-world { grid-column:1;grid-row:1/3;border-radius:32px;overflow:hidden;border:1px solid #d3edff5c;background:#0e5490; }
+.map-stage { aspect-ratio:720/1400; }
+.anime-environment { position:absolute;inset:0;overflow:hidden;pointer-events:none; }
+.anime-land-controls { position:absolute;inset:0;pointer-events:none;z-index:1; }.anime-land-hit { position:absolute;border:0;padding:0;background:transparent;pointer-events:auto;cursor:pointer;clip-path:polygon(10% 20%,40% 0,80% 10%,100% 40%,97% 80%,55% 100%,10% 82%,0 50%); }.map-controls { pointer-events:none;z-index:2; }.map-controls>button { pointer-events:auto; }
+.anime-ocean { width:100%;height:100%;object-fit:cover;position:absolute;inset:0; }
+.anime-island { position:absolute;object-fit:contain;filter:drop-shadow(0 12px 12px #08284c40); }
+.anime-route { position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 0 5px #ffe3a34a); }
+.ocean-glitter { position:absolute;inset:22% 0 0;background:radial-gradient(ellipse at 35% 50%,#d1ffff26,transparent 38%);mix-blend-mode:screen;animation:sea-light 7s ease-in-out infinite alternate; }
+.anime-mist { position:absolute;width:68%;height:10%;background:radial-gradient(ellipse,#eef9ff55,transparent 68%);filter:blur(5px);animation:mist-drift 14s ease-in-out infinite alternate; }
+.mist-far { top:28%;left:-20%; }.mist-near { top:58%;right:-26%;opacity:.6;animation-delay:-6s; }
+.anime-birds { position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 1px 2px #173950); }
+.anime-petals { position:absolute;inset:0; }
+.anime-petals i { position:absolute;width:7px;height:13px;border-radius:90% 10% 90% 10%;background:linear-gradient(140deg,#ffe4ec,#ee9fbe);box-shadow:0 1px 4px #a44f7940;animation:petal-float 10s ease-in-out infinite alternate; }
+.anime-petals i:nth-child(1) { left:7%;top:12%; }.anime-petals i:nth-child(2) { left:78%;top:39%;animation-delay:-4s; }
+.anime-petals i:nth-child(3) { left:11%;top:63%;animation-delay:-6s; }.anime-petals i:nth-child(4) { left:91%;top:84%;animation-delay:-2s; }
+.anime-petals i:nth-child(5) { left:45%;top:75%;animation-delay:-8s; }.anime-petals i:nth-child(6) { left:28%;top:93%;animation-delay:-1s; }
+.anime-petals i:nth-child(7) { left:81%;top:20%;animation-delay:-5s; }.anime-petals i:nth-child(8) { left:64%;top:61%;animation-delay:-3s; }
+.voyage-intro { grid-column:2;grid-row:1;padding-top:20px; }
+.voyage-log { grid-column:2;grid-row:2;padding-top:28px; }
+.map-brand { font-size:90px;color:#fffaf2;text-shadow:0 2px 12px #102f5945; }
+.map-glass { background:linear-gradient(125deg,#98c8f33d,#113b6a5c);border-color:#f0f4ff8f;box-shadow:inset 0 1px 0 #fff7,0 8px 26px #05285935; }
+.map-daily { border-radius:24px; }
+.daily-ring { box-shadow:0 0 13px #ffe3a44f; }.daily-ring::before { background:#406b9b; }
+.map-world-caption { left:20px;right:20px;top:18px;color:#ebf5ff; }
+.map-world-caption button { color:#eff7ff;background:#1f57835c;backdrop-filter:blur(12px);border-color:#e2f2ff77; }
+.map-world-footer { background:#0e365d; }
+.map-island-label { border-radius:18px;background:linear-gradient(125deg,#fffffff0,#e8eff6e6);border:1px solid #fffd;box-shadow:0 6px 15px #0b294b33;gap:9px;padding:10px 13px 10px 8px;color:#303d53; }
+.map-island-label strong { font-size:clamp(13px,1.3vw,19px);font-weight:600;letter-spacing:.4px; }
+.map-island-label small { font-size:11px;color:#4f5665;line-height:1.6;letter-spacing:.3px; }
+.map-island-label.open { background:linear-gradient(125deg,#fff6e9ed,#ffdae6ed);color:#ab3f43; }
+.map-island-label.complete { background:linear-gradient(125deg,#fff6ddee,#ffe5b6ee);color:#644831; }
+.island-seal { width:33px;height:33px;background:linear-gradient(140deg,#a2a9b7,#6d768b);box-shadow:inset 0 0 0 2px #fffa,0 1px 5px #32445f44; }
+.map-island-label.open .island-seal,.map-island-label.complete .island-seal { background:linear-gradient(140deg,#ffd477,#d38f3e);box-shadow:0 0 10px #ffdd89aa,inset 0 0 0 2px #fff5d2; }
+.island-seal svg { width:20px;height:20px; }
+.map-node { width:50px;height:48px; }.map-node::before { inset:8px 1px;border:2px solid #fff2c7;background:linear-gradient(#cbd5df,#7e97ac);box-shadow:0 5px 0 #71849b,0 7px 15px #08264766; }
+.map-node.open::before,.map-node.complete::before { background:linear-gradient(#ffe4a2,#e7b56c);box-shadow:0 5px 0 #b58348,0 0 16px #ffdf9f88; }
+.map-node.current::before { background:linear-gradient(#ffbfa6,#f47e79);border-color:#fff8df;animation:map-beacon 3s ease-in-out infinite; }
+.map-traveler { width:107px;height:162px;transform:translate(-50%,-110%);filter:drop-shadow(0 5px 4px #0f2c4f55); }
+.map-traveler>img { width:100%;height:100%;object-fit:contain;object-position:bottom; }
+.map-sea-name { color:#e3f6ff;opacity:.45; }.map-north { color:#f3f5e4; }
+.anime-quick-course,.anime-progress-strip { display:none; }
+.map-home .tabbar { background:linear-gradient(120deg,#81aad959,#1839666b);border-color:#fff9;box-shadow:inset 0 1px 0 #fffa,0 8px 22px #051e4a55; }
+.map-home .tab.active { background:radial-gradient(ellipse,#f8ce7663,#fff5d60c);box-shadow:inset 0 0 0 1px #f7dfaa7c,0 0 15px #ffdb7a22;color:#ffe4ad; }
+.map-reduced .map-glass { background:linear-gradient(125deg,#456d96,#234871); }
+.map-reduced :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation:none; }.map-reduced .anime-mist { display:none; }
+body.map-paused :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation-play-state:paused; }
+@keyframes sea-light { to { opacity:.4;transform:translateY(-9px); } }
+@keyframes mist-drift { to { transform:translateX(18px);opacity:.3; } }
+@keyframes petal-float { to { transform:translate(15px,27px) rotate(65deg);opacity:.5; } }
+@media (min-width:1100px) { .voyage-world { position:relative;top:auto; }.map-home .tabbar { left:calc(50% - 176px);width:440px; } }
+@media (min-width:701px) and (max-width:1000px) { .voyage-layout { grid-template-columns:minmax(0,1fr) 255px;gap:0 24px; }.map-home .app { padding:24px 24px 120px; }.map-world-caption>span { display:none; }.map-island-label { gap:5px;padding:7px; }.map-island-label strong { font-size:12px; }.map-island-label small { font-size:9px; }.island-seal { width:25px;height:25px; }.map-traveler { width:75px;height:115px; } }
+@media (max-width:700px) {
+  .map-home .app { max-width:560px;padding:0 0 calc(110px + env(safe-area-inset-bottom)); }
+  .voyage-layout { display:flex;flex-direction:column; }
+  .voyage-world { width:100%;border:0;border-radius:0;overflow:hidden;order:1; }
+  .map-stage { aspect-ratio:auto;height:max(100svh,calc(100vw * 1.96));min-height:760px; }
+  .voyage-intro { position:absolute;top:0;left:0;right:0;padding:calc(30px + env(safe-area-inset-top)) 20px 0;min-height:180px;background:linear-gradient(#0b3d7e3b,transparent);pointer-events:none;z-index:8; }
+  .map-brand { font-size:clamp(64px,18vw,92px);margin:0;letter-spacing:4px;line-height:1.05; }
+  .brand-flower { bottom:3px;right:-17px; }
+  .map-wordmark { font-size:12px;letter-spacing:4px;margin-left:4px; }
+  .map-tagline { font-size:14px;letter-spacing:2px;margin-top:12px;line-height:1.75;text-shadow:0 1px 5px #072f5a; }
+  .map-daily { pointer-events:auto;top:calc(39px + env(safe-area-inset-top));right:14px;width:49%;padding:11px 8px;gap:6px;border-radius:19px; }
+  .map-daily b { font-size:22px; }.map-daily em { font-size:10px; }.map-daily small { font-size:9px;letter-spacing:0; }.daily-streak { gap:4px;padding-right:7px; }.daily-streak .flame { width:24px;height:32px; }.daily-ring { width:27px;height:27px; }.daily-ring svg { width:14px;height:14px; }#map-checkin-text { font-size:8px; }
+  .map-world-caption { top:auto;bottom:13px;right:14px;left:auto;z-index:10; }.map-world-caption button { min-height:36px;font-size:10px; }
+  .map-sea-name { top:38%;left:5%;font-size:11px;letter-spacing:5px; }.map-north { display:none; }
+  .map-island-label { padding:7px 10px 7px 6px;gap:6px;min-height:48px;border-radius:15px; }.map-island-label strong { font-size:13px; }.map-island-label small { font-size:9px; }.island-seal { width:28px;height:28px; }.island-seal svg { width:17px;height:17px; }
+  .map-node { width:46px;height:44px; }.map-node::before { inset:10px 1px; }.map-node svg { width:18px;height:18px; }
+  .map-traveler { width:80px;height:126px; }
+  .anime-mist { filter:blur(3px); }
+  .map-world-footer { position:relative;min-height:50px;padding:8px 18px;z-index:9;background:#123b63; }
+  .map-world-footer>span { font-size:10px;letter-spacing:1px; }
+  .map-world-caption { bottom:60px; }.map-world-caption button { font-size:9px;padding:6px 9px; }
+  .voyage-log { order:2;background:linear-gradient(#123b63,#0c2d50);padding:18px 20px 0; }
+  .map-course { scroll-margin-top:18px;scroll-margin-bottom:180px; }
+  .anime-quick-course { position:absolute;display:flex;align-items:center;justify-content:space-between;gap:8px;right:14px;bottom:176px;width:174px;min-height:86px;padding:14px 13px;text-align:left;color:#fff8ee;border-radius:22px;z-index:7;cursor:pointer;font-family:inherit; }
+  .anime-quick-course small { display:block;font-size:11px;letter-spacing:1px;color:#e1f3ff; }.anime-quick-course b { display:block;font-size:24px;font-weight:500;letter-spacing:2px;margin:5px 0; }.anime-quick-course em { font-size:10px;font-style:normal;color:#dfedff; }.anime-quick-course svg { width:22px;height:22px; }.anime-quick-course::before { content:'✿';position:absolute;right:20px;top:10px;color:#ffd9e9;font-size:27px;opacity:.75; }
+  .anime-quick-course { height:90px;min-height:90px;bottom:156px; }.anime-quick-course b { white-space:nowrap;font-size:22px;letter-spacing:1px; }.anime-quick-course>svg { flex-shrink:0;width:18px; }.anime-quick-course small { font-size:10px; }
+  .anime-progress-strip { position:fixed;display:flex;align-items:center;gap:10px;left:50%;transform:translateX(-50%);bottom:calc(91px + env(safe-area-inset-bottom));width:calc(100% - 32px);max-width:440px;min-height:54px;padding:10px 15px;border-radius:19px;z-index:55;color:#f8f5ed; }
+  .anime-progress-strip>svg { width:26px;height:26px;color:#f7d69c;flex-shrink:0; }.anime-progress-strip>div { flex:1;min-width:0; }.anime-progress-strip b { font-size:12px;font-weight:500; }.anime-progress-strip small { float:right;font-size:10px;color:#dae7f4; }.anime-progress-strip .map-progress { height:6px;margin:7px 0 0; }.anime-progress-strip>a { border-left:1px solid #d7e8fa66;padding-left:13px;color:#f1f4ff;font-size:11px;text-decoration:none;white-space:nowrap; }
+  .map-home .tabbar { left:50%;bottom:calc(12px + env(safe-area-inset-bottom));max-width:440px;min-height:66px;border-radius:32px; }.map-home .tab { padding:8px 4px; }.map-home .tab svg { width:23px;height:23px; }
+}
+@media (max-width:360px) { .voyage-intro { padding-left:16px; }.map-brand { font-size:62px; }.map-wordmark { font-size:10px;letter-spacing:3px; }.map-tagline { font-size:12px; }.map-daily { right:10px;width:48%;padding:10px 7px; }.map-daily b { font-size:18px; }.daily-streak .flame { width:19px; }.daily-ring { display:none; }.map-island-label { padding:6px;gap:4px; }.map-island-label strong { font-size:12px; }.map-island-label small { font-size:8px; }.island-seal { width:25px;height:25px; }.anime-quick-course { width:142px;min-height:90px;right:12px;padding:12px; }.anime-quick-course b { font-size:18px; }.anime-quick-course small { font-size:9px; }.anime-quick-course em { font-size:9px; } }
+@media (prefers-reduced-motion:reduce) { .map-home :is(.anime-mist,.anime-petals i,.ocean-glitter) { animation:none!important; } }
+html[data-theme="dark"] .map-home .anime-environment { filter:brightness(.84) saturate(.96); }
+@media (prefers-color-scheme:dark) { html[data-theme="auto"] .map-home .anime-environment { filter:brightness(.84) saturate(.96); } }
