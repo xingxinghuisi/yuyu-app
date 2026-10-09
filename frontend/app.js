@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.0.2';
+var APP_VERSION = '1.0.3';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -399,7 +399,7 @@ function every(fn, ms) {
 
 /* 路由名（不含 #/ 前缀） */
 function currentRoute() {
-  var m = (location.hash || '').match(/^#\/([a-z]+)/);
+  var m = (location.hash || '').match(/^#\/([a-z]+(?:\/[a-z]+)?)/);
   return m ? m[1] : null;
 }
 
@@ -411,9 +411,11 @@ function setChrome(route) {
   $('#topbar').classList.toggle('hidden', !inApp);
   $('#tabbar').classList.toggle('hidden', !inApp);
   if (inApp) {
+    // v1.0.3: me/* 子页面归属"我的" tab 高亮
+    var tabRoute = (route.indexOf('me/') === 0) ? 'me' : route;
     $$('.tab').forEach(function (t) {
       var tabs = (t.getAttribute('data-tabs') || '').split(',');
-      t.classList.toggle('active', tabs.indexOf(route) !== -1);
+      t.classList.toggle('active', tabs.indexOf(tabRoute) !== -1);
     });
   }
 }
@@ -2135,6 +2137,13 @@ function renderStats() {
 routes['stats'] = renderStats;
 
 /* ================= 12. 页面：我的 ================= */
+// v1.0.3: "我的"页重构——学习统计保留顶部，设置项收进 iOS 风格分组菜单
+function meSubHead(title) {
+  return '<div class="subpage-head">' +
+    '<a href="#/me" class="back-link" aria-label="返回我的">‹ 我的</a>' +
+    '<h2>' + esc(title) + '</h2><span class="subpage-head-sp"></span></div>';
+}
+
 function renderMe() {
   var username = localStorage.getItem('yuyu_username') || '';
   app.innerHTML =
@@ -2165,6 +2174,42 @@ function renderMe() {
       '<div id="stats-body">' + loadingHtml('正在统计…') + '</div>' +
     '</div>' +
 
+    '<div class="menu-group-label">设置</div>' +
+    '<div class="glass menu-list">' +
+      '<a href="#/me/voice" class="menu-item"><span class="menu-ic" style="background:#E03E2D">🔊</span><span class="menu-t">发音设置</span><span class="chev">›</span></a>' +
+      '<a href="#/me/study" class="menu-item"><span class="menu-ic" style="background:#274C77">📚</span><span class="menu-t">学习设置</span><span class="chev">›</span></a>' +
+      '<a href="#/me/account" class="menu-item"><span class="menu-ic" style="background:#7A6C5D">👤</span><span class="menu-t">账号与安全</span><span class="chev">›</span></a>' +
+      '<a href="#/me/about" class="menu-item"><span class="menu-ic" style="background:#8A93A6">ℹ️</span><span class="menu-t">关于</span><span class="chev">›</span></a>' +
+    '</div>';
+
+  // 回显用户名
+  api('/auth/me').then(function (me) {
+    if (me.username) localStorage.setItem('yuyu_username', me.username);
+  }).catch(function () { /* 忽略回显失败 */ });
+
+  renderStatsCard();
+}
+routes['me'] = renderMe;
+
+/* ---------- 我的 / 发音设置 ---------- */
+function renderMeVoice() {
+  app.innerHTML = meSubHead('发音设置') +
+    '<div class="glass about-card">' +
+      '<h3>发音设置</h3>' +
+      '<div style="margin-bottom:10px"><label class="muted" style="font-size:13px">发音人</label>' +
+      '<select id="sel-voice" class="input" style="width:100%;margin-top:4px"><option value="">系统默认</option></select></div>' +
+      '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span> <span class="muted" style="font-size:11px">（真人发音 · 系统 TTS 均适用）</span></label>' +
+      '<input type="range" id="range-rate" min="0.5" max="1.2" step="0.1" value="0.8" style="width:100%">' +
+      '<div style="display:flex;justify-content:space-between;font-size:11px" class="muted"><span>慢</span><span>快</span></div></div>' +
+      '<button class="btn btn-ghost btn-sm" id="btn-voice-test" style="margin-top:8px">试听</button>' +
+    '</div>';
+  initVoiceSettings();
+}
+routes['me/voice'] = renderMeVoice;
+
+/* ---------- 我的 / 学习设置 ---------- */
+function renderMeStudy() {
+  app.innerHTML = meSubHead('学习设置') +
     '<div class="glass setting-card">' +
       '<h3>学习语言</h3>' +
       '<div class="seg" id="lang-seg">' +
@@ -2182,45 +2227,6 @@ function renderMe() {
         '<button class="btn btn-ghost" id="goal-plus" aria-label="增加">＋</button>' +
       '</div>' +
       '<p class="muted seg-note">1–200 之间，首页今日进度环按此目标计算。</p>' +
-    '</div>' +
-
-    '<div class="glass bind-form">' +
-      '<h3>绑定邮箱 / 手机</h3>' +
-      '<div class="field" id="f-email">' +
-        '<label for="in-email">邮箱</label>' +
-        '<input id="in-email" type="email" autocomplete="email" placeholder="用于找回密码">' +
-        '<div class="error hidden"></div>' +
-      '</div>' +
-      '<div class="field" id="f-phone">' +
-        '<label for="in-phone">手机号</label>' +
-        '<input id="in-phone" type="tel" autocomplete="tel" placeholder="11 位大陆手机号">' +
-        '<div class="error hidden"></div>' +
-      '</div>' +
-      '<button class="btn btn-indigo" id="btn-bind">保存绑定</button>' +
-    '</div>' +
-
-    '<div class="glass about-card">' +
-      '<h3>发音设置</h3>' +
-      '<div style="margin-bottom:10px"><label class="muted" style="font-size:13px">发音人</label>' +
-      '<select id="sel-voice" class="input" style="width:100%;margin-top:4px"><option value="">系统默认</option></select></div>' +
-      '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span> <span class="muted" style="font-size:11px">（真人发音 · 系统 TTS 均适用）</span></label>' +
-      '<input type="range" id="range-rate" min="0.5" max="1.2" step="0.1" value="0.8" style="width:100%">' +
-      '<div style="display:flex;justify-content:space-between;font-size:11px" class="muted"><span>慢</span><span>快</span></div></div>' +
-      '<button class="btn btn-ghost btn-sm" id="btn-voice-test" style="margin-top:8px">试听</button>' +
-    '</div>' +
-
-    '<div class="glass about-card">' +
-      '<h3>关于数据</h3>' +
-      '词库来源：OpenJLPT、JMdict-EDICT，例句来自 Tatoeba。<br>' +
-      '以上数据均以 CC BY-SA 4.0 协议共享，版权归各自贡献者所有。<br>' +
-      '语屿 Kotoba · 每天十五分钟，筑一座日语之岛。<br>' +
-      '<span class="muted">版本 v' + APP_VERSION + '</span> ' +
-      '<button class="btn btn-ghost btn-sm" id="btn-check-update" style="margin-left:8px">检查更新</button>' +
-    '</div>' +
-
-    '<div class="glass danger-zone">' +
-      '<div class="list-row" id="row-logout"><span>退出登录</span><span class="chev">›</span></div>' +
-      '<div class="list-row" id="row-delete"><span>注销账号</span><span class="chev">›</span></div>' +
     '</div>';
 
   function paintLangSeg(lang) {
@@ -2230,11 +2236,8 @@ function renderMe() {
   }
   paintLangSeg(userLang());
 
-  // 回显已绑定信息、语言偏好与每日目标
+  // 回显语言偏好与每日目标
   api('/auth/me').then(function (me) {
-    if (me.email) $('#in-email').value = me.email;
-    if (me.phone) $('#in-phone').value = me.phone;
-    if (me.username) localStorage.setItem('yuyu_username', me.username);
     if (me.lang === 'zh' || me.lang === 'en') {
       localStorage.setItem(LANG_KEY, me.lang);
       paintLangSeg(me.lang);
@@ -2285,6 +2288,37 @@ function renderMe() {
       });
     });
   });
+}
+routes['me/study'] = renderMeStudy;
+
+/* ---------- 我的 / 账号与安全 ---------- */
+function renderMeAccount() {
+  app.innerHTML = meSubHead('账号与安全') +
+    '<div class="glass bind-form">' +
+      '<h3>绑定邮箱 / 手机</h3>' +
+      '<div class="field" id="f-email">' +
+        '<label for="in-email">邮箱</label>' +
+        '<input id="in-email" type="email" autocomplete="email" placeholder="用于找回密码">' +
+        '<div class="error hidden"></div>' +
+      '</div>' +
+      '<div class="field" id="f-phone">' +
+        '<label for="in-phone">手机号</label>' +
+        '<input id="in-phone" type="tel" autocomplete="tel" placeholder="11 位大陆手机号">' +
+        '<div class="error hidden"></div>' +
+      '</div>' +
+      '<button class="btn btn-indigo" id="btn-bind">保存绑定</button>' +
+    '</div>' +
+
+    '<div class="glass danger-zone">' +
+      '<div class="list-row" id="row-logout"><span>退出登录</span><span class="chev">›</span></div>' +
+      '<div class="list-row" id="row-delete"><span>注销账号</span><span class="chev">›</span></div>' +
+    '</div>';
+
+  // 回显已绑定信息
+  api('/auth/me').then(function (me) {
+    if (me.email) $('#in-email').value = me.email;
+    if (me.phone) $('#in-phone').value = me.phone;
+  }).catch(function () { /* 忽略回显失败 */ });
 
   function setErr(id, msg) {
     var f = $('#' + id), e = $('.error', f);
@@ -2317,8 +2351,34 @@ function renderMe() {
       if (yes) { toast('已退出登录'); logout(); }
     });
   });
-  initVoiceSettings();
-  renderStatsCard();
+
+  $('#row-delete').addEventListener('click', function () {
+    confirmModal('注销账号', '注销后，你的学习记录、打卡与词库进度将被永久删除，且无法恢复。确定继续吗？', '确认注销')
+      .then(function (yes) {
+        if (!yes) return;
+        api('/auth/account', 'DELETE').then(function () {
+          toast('账号已注销');
+          logout();
+        }).catch(function (err) {
+          toast(err.message || '注销失败，请稍后重试');
+        });
+      });
+  });
+}
+routes['me/account'] = renderMeAccount;
+
+/* ---------- 我的 / 关于 ---------- */
+function renderMeAbout() {
+  app.innerHTML = meSubHead('关于') +
+    '<div class="glass about-card">' +
+      '<h3>关于数据</h3>' +
+      '词库来源：OpenJLPT、JMdict-EDICT，例句来自 Tatoeba。<br>' +
+      '以上数据均以 CC BY-SA 4.0 协议共享，版权归各自贡献者所有。<br>' +
+      '语屿 Kotoba · 每天十五分钟，筑一座日语之岛。<br>' +
+      '<span class="muted">版本 v' + APP_VERSION + '</span> ' +
+      '<button class="btn btn-ghost btn-sm" id="btn-check-update" style="margin-left:8px">检查更新</button>' +
+    '</div>';
+
   // 手动检查更新：强制刷新 SW，发现新版走热更新流程
   var cbu = $('#btn-check-update');
   if (cbu) cbu.addEventListener('click', function () {
@@ -2340,21 +2400,8 @@ function renderMe() {
       }).catch(function () { done('检查失败，请稍后重试'); });
     }).catch(function () { done('检查失败，请稍后重试'); });
   });
-
-  $('#row-delete').addEventListener('click', function () {
-    confirmModal('注销账号', '注销后，你的学习记录、打卡与词库进度将被永久删除，且无法恢复。确定继续吗？', '确认注销')
-      .then(function (yes) {
-        if (!yes) return;
-        api('/auth/account', 'DELETE').then(function () {
-          toast('账号已注销');
-          logout();
-        }).catch(function (err) {
-          toast(err.message || '注销失败，请稍后重试');
-        });
-      });
-  });
 }
-routes['me'] = renderMe;
+routes['me/about'] = renderMeAbout;
 
 /* ================= v0.8 学习统计图表（Canvas 手绘） ================= */
 function renderStatsCard() {
@@ -2465,3 +2512,4 @@ window.addEventListener('hashchange', navigate);
 if (!location.hash) location.hash = '#/login';
 navigate();
 syncLang(); // 已登录时同步后端语言偏好
+
