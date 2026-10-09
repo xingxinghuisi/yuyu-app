@@ -55,3 +55,6 @@
 @media (prefers-reduced-motion: reduce) {
   .sheet, .scrim { transition: none; }
 }
+
+/* 隐藏旧的内联详情面板（改用抽屉） */
+#map-course { display: none !important; }
