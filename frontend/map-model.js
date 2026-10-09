@@ -21,9 +21,9 @@
       island.available = !!island.book && island.total > 0;
     });
     var active = islands[0];
-    for (var k = 0; k < islands.length; k++) {
-      if (islands[k].studied > 0 && !islands[k].complete) { active = islands[k]; break; }
-    }
+    islands.forEach(function (island) {
+      if (island.studied > 0 && !island.complete) active = island;
+    });
     if (active.complete) active = islands.find(function (island) { return !island.complete && !island.locked; }) || islands[4];
     return { islands: islands, active: active };
   }
