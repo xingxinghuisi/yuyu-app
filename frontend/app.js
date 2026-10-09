@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.2.1';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -413,14 +413,14 @@ function setChrome(route) {
   var inApp = authed && route !== 'login';
   $('#topbar').classList.toggle('hidden', !inApp);
   $('#tabbar').classList.toggle('hidden', !inApp);
-  // v1.1: 探索页用自定义 HUD，隐藏全局顶栏
-  document.body.classList.toggle('route-explore', route === 'explore');
   if (inApp) {
     // v1.0.3: me/* 子页面归属"我的" tab 高亮
     var tabRoute = (route.indexOf('me/') === 0) ? 'me' : route;
     $$('.tab').forEach(function (t) {
       var tabs = (t.getAttribute('data-tabs') || '').split(',');
       t.classList.toggle('active', tabs.indexOf(tabRoute) !== -1);
+      if (tabs.indexOf(tabRoute) !== -1) t.setAttribute('aria-current', 'page');
+      else t.removeAttribute('aria-current');
     });
   }
 }
@@ -428,11 +428,12 @@ function setChrome(route) {
 function navigate() {
   var r = currentRoute();
   var authed = !!getToken();
-  if (!routes[r]) r = authed ? 'explore' : 'login';       // 未知 hash -> 404 处理
+  if (!routes[r]) r = authed ? 'home' : 'login';       // 未知 hash -> 404 处理
   if (r !== 'login' && !authed) r = 'login';           // 未登录守卫
-  if (r === 'login' && authed) r = 'explore';            // 已登录不再看登录页
+  if (r === 'login' && authed) r = 'home';            // 已登录不再看登录页
   if (currentRoute() !== r) { location.hash = '#/' + r; return; }
   clearTimers();
+  dismissArchipelagoSheet();
   stopAmbientPetals(); // 离开登录页即停止缓飘樱花
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
   window.scrollTo(0, 0);
@@ -440,7 +441,7 @@ function navigate() {
   // v1.0.1: 路由切换时底栏重置为显示状态
   if (typeof tabbarAutoHide !== 'undefined') tabbarAutoHide.reset();
   // v1.0.2: 学习/复习/考试全屏——底栏完全隐藏，退出到其他路由后恢复
-  var FULLSCREEN_ROUTES = { study: 1, review: 1, quiz: 1 };
+  var FULLSCREEN_ROUTES = { study: 1, voyage: 1, review: 1, quiz: 1 };
   document.body.classList.toggle('tabbar-full-hide', !!FULLSCREEN_ROUTES[r]);
   routes[r]();
   // v1.0: 路由级页面进入动画（右滑入+淡入）
@@ -612,14 +613,14 @@ function renderLogin() {
             '</div>';
           vibrate(30);
           sakuraBurst(30);
-          setTimeout(function () { location.hash = '#/explore'; }, 1200);
+          setTimeout(function () { location.hash = '#/home'; }, 1200);
         } else {
           // 登录成功：按钮变对勾 + 涟漪扩散，短暂停留后进首页
           btn.classList.add('btn-success');
           btn.innerHTML = '<svg class="check-mini" viewBox="0 0 24 24" aria-hidden="true">' +
             '<path d="M4 12.5l5 5L20 6.5"/></svg> 登录成功';
           vibrate(30);
-          setTimeout(function () { location.hash = '#/explore'; }, 800);
+          setTimeout(function () { location.hash = '#/home'; }, 800);
         }
       })
       .catch(function (err) {
@@ -905,124 +906,8 @@ function drawMiniIsland(ctx, cx, cy, level) {
   }
 }
 
-/* ================= v1.1: 探索（群岛地图） ================= */
-var EXPLORE_ISLANDS = [
-  { level: 'N1', name: '雪见岛', sub: '最上の雪雲へ', x: 50, y: 8 },
-  { level: 'N2', name: '红叶岛', sub: '燃ゆる秋の世界', x: 50, y: 27 },
-  { level: 'N3', name: '富士岛', sub: '広がる表現の帯', x: 50, y: 47 },
-  { level: 'N4', name: '鸟居岛', sub: 'つながる合間', x: 50, y: 67 },
-  { level: 'N5', name: '樱花岛', sub: 'はじめの一歩', x: 50, y: 87 }
-];
-
-function renderExplore() {
-  app.innerHTML = loadingHtml('正在扬帆起航…');
-  Promise.all([
-    api('/home/summary').catch(function () { return null; }),
-    api('/books').catch(function () { return null; })
-  ]).then(function (res) {
-    var d = res[0] || {};
-    var books = Array.isArray(res[1]) ? res[1] : [];
-    var prog = {};
-    books.forEach(function (b) {
-      if (b.category === 'level' && b.level) prog[b.level] = b;
-    });
-    // 解锁：N5 默认解锁；上一级进度 >= 80% 解锁下一级
-    var order = ['N5', 'N4', 'N3', 'N2', 'N1'];
-    var unlocked = { N5: true };
-    for (var i = 1; i < order.length; i++) {
-      var pb = prog[order[i - 1]];
-      unlocked[order[i]] = !!pb && (pb.progress || 0) >= 0.8;
-    }
-    var foundCurrent = false;
-    var islands = EXPLORE_ISLANDS.map(function (is) {
-      var b = prog[is.level];
-      var p = b ? (b.progress || 0) : 0;
-      var st;
-      if (!unlocked[is.level]) st = 'locked';
-      else if (p >= 0.95) st = 'done';
-      else if (!foundCurrent) { st = 'current'; foundCurrent = true; }
-      else st = 'locked';
-      return {
-        level: is.level, name: is.name, sub: is.sub, x: is.x, y: is.y,
-        status: st, studied: b ? (b.studied || 0) : 0, total: b ? (b.total || 0) : 0
-      };
-    });
-    var cur = null;
-    islands.forEach(function (is) { if (is.status === 'current') cur = is; });
-    if (!cur) {
-      // 无 current（全通关或异常）：旅人停在最高的可达岛屿
-      for (var k = 0; k < islands.length; k++) {
-        if (islands[k].status !== 'locked') { cur = islands[k]; break; }
-      }
-      if (!cur) cur = islands[islands.length - 1];
-    }
-
-    var streak = d.streak || 0;
-    var learned = d.today_learned || 0;
-    var goal = d.daily_goal || 30;
-    // 兜底：异常大值截断显示（避免 445/30 这类困惑）
-    var learnedShow = learned > 999 ? '999+' : String(learned);
-    var gpct = goal > 0 ? Math.min(1, learned / goal) : 0;
-    var C = 2 * Math.PI * 15;
-
-    var pills = islands.map(function (is) {
-      var icon = is.status === 'done' ? '✓' : (is.status === 'current' ? '●' : '🔒');
-      return '<div class="island-pill ' + is.status + '" data-level="' + is.level + '" data-name="' + esc(is.name) + '"' +
-        ' style="left:' + is.x + '%;top:' + is.y + '%">' +
-        '<span class="ip-icon">' + icon + '</span>' +
-        '<span class="ip-text"><b>' + is.level + ' ' + esc(is.name) + '</b><i>' + esc(is.sub) + '</i></span>' +
-        '</div>';
-    }).join('');
-
-    // 旅人站在当前岛右侧偏移，不压住标签
-    var traveler = cur ? '<div class="traveler" style="left:calc(' + cur.x + '% + 52px);top:calc(' + cur.y + '% - 14px)">🧑‍🎓</div>' : '';
-    var lesson = cur.total > 0 ? (Math.floor(cur.studied / 20) + 1) : 1;
-    var cpct = cur.total > 0 ? Math.min(1, cur.studied / cur.total) : 0;
-
-    app.innerHTML =
-      '<div class="explore-hud">' +
-        '<div class="eh-brand"><div class="eh-logo">屿</div>' +
-          '<div><div class="eh-name">语屿<span>KOTOBA</span></div>' +
-          '<div class="eh-slogan">每天十五分钟，<br>筑一座日语之岛。</div></div></div>' +
-        '<div class="eh-stats">' +
-          '<div class="eh-stat"><span class="eh-emoji">🔥</span><div><b>' + streak + '天</b><i>连续打卡</i></div></div>' +
-          '<div class="eh-stat"><svg width="40" height="40" viewBox="0 0 38 38">' +
-            '<circle cx="19" cy="19" r="15" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="5"/>' +
-            '<circle cx="19" cy="19" r="15" fill="none" stroke="#ffd98a" stroke-width="5" stroke-linecap="round" ' +
-              'stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - gpct)).toFixed(1) + '" transform="rotate(-90 19 19)"/>' +
-          '</svg><div><b>今日目标</b><i>' + learnedShow + '/' + goal + '</i></div></div>' +
-        '</div>' +
-      '</div>' +
-
-      '<div class="explore-map">' +
-        '<img src="assets/islands.jpg" alt="群岛地图" loading="lazy" draggable="false">' +
-        pills + traveler +
-      '</div>' +
-
-      '<div class="explore-course">' +
-        '<div class="ec-top"><span class="ec-label">当前课程</span>' +
-          '<span class="ec-lesson">第 ' + lesson + ' 课<span class="book">📖</span></span></div>' +
-        '<div class="ec-island">' + cur.level + ' ' + esc(cur.name) +
-          '<span>' + cur.studied + ' / ' + cur.total + ' 词</span></div>' +
-        '<div class="ec-bar"><div class="ec-fill" style="width:' + Math.round(cpct * 100) + '%"></div></div>' +
-        '<div class="ec-xp">💎 320 XP<span class="xp-arrow">›</span></div>' +
-      '</div>';
-
-    $$('.island-pill').forEach(function (p) {
-      p.addEventListener('click', function () {
-        var nm = p.getAttribute('data-name');
-        var lv = p.getAttribute('data-level');
-        if (p.classList.contains('locked')) toast('「' + nm + '」尚未解锁，先征服 ' + lv + ' 之前的岛屿吧');
-        else toast('「' + nm + '」站点玩法即将上线，敬请期待');
-      });
-    });
-  }).catch(function () {
-    app.innerHTML = '<div class="glass" style="margin:24px;padding:24px;text-align:center">海图加载失败，请下拉重试</div>';
-  });
-}
-
 routes['home'] = renderHome;
-// v1.2 动漫群岛：从岛屿直接进入背词流；map.js 里 startIsland() 跳转到 #/voyage
+// Keep the normal study route as the shelf; voyage is a resumable entry to its existing flow.
 routes['voyage'] = function () {
   if (!mapVoyageBook) { location.hash = '#/study'; return; }
   StudyCtx.bookId = mapVoyageBook.id;
@@ -1031,8 +916,6 @@ routes['voyage'] = function () {
   mapVoyageBook = null;
   startStudyFlow();
 };
-// v1.2: 优先使用 explore-map.js 的竖向群岛海图；未加载时回退旧版
-routes['explore'] = window.renderExploreMap || renderExplore;
 
 /* ================= 8. 页面：学习 ================= */
 /* v0.3: 零输入题型 —— 砍掉 spelling 打字题；listening 改为听音选义 */
@@ -1056,8 +939,6 @@ var SHELF_CATS = [
 
 /* #/study 入口：书架（顶部带今日 hub 条：进度/打卡/岛屿） */
 function renderStudy() {
-  // v1.2: 从探索页点岛屿进来 —— 跳过书架，直接进入该级词书的背词流
-  if (StudyCtx.autoStart) { StudyCtx.autoStart = false; startStudyFlow(); return; }
   app.innerHTML = loadingHtml('正在取书…');
   Promise.all([
     api('/books').catch(function () { return null; }),
@@ -2542,6 +2423,12 @@ function roundRect(ctx, x, y, w, h, r) {
 
 /* ================= 启动 ================= */
 injectSvgDefs();
+document.addEventListener('visibilitychange', function () {
+  document.body.classList.toggle('map-paused', document.hidden);
+});
+var mapMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+if (mapMotionQuery.addEventListener) mapMotionQuery.addEventListener('change', updateMapMotion);
+else if (mapMotionQuery.addListener) mapMotionQuery.addListener(updateMapMotion);
 initTheme();
 window.addEventListener('hashchange', navigate);
 if (!location.hash) location.hash = '#/login';
