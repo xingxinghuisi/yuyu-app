@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.1.2';
+var APP_VERSION = '1.2.0';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -1118,7 +1118,8 @@ function renderExplore() {
 }
 
 routes['home'] = renderHome;
-routes['explore'] = renderExplore;
+// v1.2: 优先使用 explore-map.js 的竖向群岛海图；未加载时回退旧版
+routes['explore'] = window.renderExploreMap || renderExplore;
 
 /* ================= 8. 页面：学习 ================= */
 /* v0.3: 零输入题型 —— 砍掉 spelling 打字题；listening 改为听音选义 */
@@ -1142,6 +1143,8 @@ var SHELF_CATS = [
 
 /* #/study 入口：书架（顶部带今日 hub 条：进度/打卡/岛屿） */
 function renderStudy() {
+  // v1.2: 从探索页点岛屿进来 —— 跳过书架，直接进入该级词书的背词流
+  if (StudyCtx.autoStart) { StudyCtx.autoStart = false; startStudyFlow(); return; }
   app.innerHTML = loadingHtml('正在取书…');
   Promise.all([
     api('/books').catch(function () { return null; }),
