@@ -1,5 +1,7 @@
 # 群岛地图首页 · 第一版
 
+> 本文件记录上一版 SVG 方案与当时验证环境。当前首页已升级为独立动漫素材分层，最新实现、HTTP/PWA 验证与差距见 [动漫首页说明](anime-home.md)。
+
 ## 审计
 
 基线：`7651b4c17e70c0224dde259006a478e1f05fd041`。前端为无构建的 `index.html / styles.css / app.js`，hash 路由，登录 token 位于 localStorage；FastAPI 同源托管前端、SQLite 存词库和用户状态。书架通过 `StudyCtx → /study/plan → /study/answer` 学习，FSRS 经 `/review/due /review/answer` 复习。首页原先由任务卡、打卡和养成小岛组成。没有独立课程章节、旅人坐标或 XP 数据表。

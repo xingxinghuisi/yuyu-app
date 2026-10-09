@@ -40,7 +40,12 @@ async function main() {
     await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();
     assert.equal(await page.locator('[data-island]').count(),5);
     assert.equal(await page.locator('[data-island].locked').count(),4);
+    await page.locator('.anime-environment img').evaluateAll(imgs=>Promise.all(imgs.map(img=>img.decode())));
+    await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));
     await page.screenshot({path:path.join(OUT,'desktop.png'),fullPage:true});
+    const maple = page.locator('[data-scenery="3"]');const mapleBox = await maple.boundingBox();
+    await maple.click({position:{x:mapleBox.width*.3,y:mapleBox.height*.6}});
+    assert.match(await page.locator('#map-course').innerText(),/红叶岛/);
     await page.locator('[data-island="2"]').click();
     assert.match(await page.locator('#map-course').innerText(),/富士岛/);
     assert.match(await page.locator('#map-course').innerText(),/从书架自由选级/);
@@ -66,21 +71,25 @@ async function main() {
     await page.emulateMedia({reducedMotion:'reduce'});
     assert.equal(await page.locator('.traveler-bob').evaluate(el=>getComputedStyle(el).animationName),'none');
     await page.emulateMedia({reducedMotion:'no-preference'});
+    await page.evaluate(()=>{localStorage.setItem('yuyu_map_motion','auto');updateMapMotion();});
     console.log('PASS check-in, existing poster, reduced-motion persistence/system preference');
 
     for(const width of [320,390,768,1440]) {
       await page.setViewportSize({width,height:844});
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'overflow at '+width+' '+JSON.stringify(await page.locator('body *').evaluateAll(els=>els.map(el=>({tag:el.tagName,cls:el.className,left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right})).filter(b=>b.right>innerWidth+1&&b.tag!=='svg'&&typeof b.cls==='string').slice(0,12))));
-      await page.locator('[data-island="4"]').click();assert.match(await page.locator('#map-course').innerText(),/雪见岛/);
+      for (const kind of ['island','node']) for (let i=0;i<5;i++) {
+        await page.locator('[data-'+kind+'="'+i+'"]').click();
+        assert.match(await page.locator('#map-course').innerText(),new RegExp(['樱花岛','鸟居岛','富士岛','红叶岛','雪见岛'][i]));
+      }
       await page.locator('#map-traveler').click();
       for(const target of ['map-island-label','map-node']) {
         const boxes=await page.locator('.'+target).evaluateAll(els=>els.map(el=>{const b=el.getBoundingClientRect();return{x:b.x,right:b.right,width:b.width,height:b.height};}));
         assert.ok(boxes.every(b=>b.x>=0&&b.right<=width+1&&b.width>=40&&b.height>=40),'hit area at '+width+' '+target);
       }
-      if(width===390) { await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(OUT,'mobile.png'),fullPage:true}); }
-      if(width===1440) { await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(OUT,'desktop.png'),fullPage:true}); }
+      if(width===390) { await page.locator('#map-quick-course').click();await page.locator('#btn-know').waitFor();assert.equal(await page.evaluate(()=>StudyCtx.bookId),'level-n5');await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();await page.evaluate(()=>Promise.all([...document.images].map(img=>img.decode().catch(()=>{}))));await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(OUT,'mobile.png'),fullPage:true}); }
+      if(width===1440) { await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('page-enter'));await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(OUT,'desktop.png'),fullPage:true}); }
     }
-    console.log('PASS responsive 320/390/768/1440, accessible island/node hit areas');
+    console.log('PASS responsive 320/390/768/1440; every island and node clickable; course shortcut opens real study');
 
     await page.goto(BASE+'/#/study');await page.locator('.book').first().waitFor();
     await page.locator('.book').first().click();await page.locator('#m-shuffle').click();await page.locator('#btn-know').waitFor();
@@ -95,7 +104,7 @@ async function main() {
     await page.goto(BASE+'/#/home');await page.locator('#map-start').waitFor();
     if(!IN_PROCESS) {
     await page.evaluate(()=>navigator.serviceWorker.ready);
-    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v19-archipelago');return (await c.keys()).map(r=>new URL(r.url).pathname);});
+    const cached=await page.evaluate(async()=>{const c=await caches.open('yuyu-v21-anime');return (await c.keys()).map(r=>new URL(r.url).pathname);});
     assert.ok(cached.includes('/map.js')&&cached.includes('/map-model.js')&&cached.includes('/map.css'));
     assert.ok(!cached.some(p=>p.startsWith('/api')));
     await context.setOffline(true);await page.reload();await page.locator('#map-retry').waitFor();
@@ -117,6 +126,11 @@ async function main() {
     await context.unroute('**/api/books');
     assert.deepEqual(errors,[]);
     console.log('PASS route race, no browser runtime errors');
+    await context.addInitScript(()=>Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>2}));
+    await page.goto(BASE+'/#/home');await page.reload();await page.locator('#map-start').waitFor();
+    assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('map-reduced')),true);
+    assert.equal(await page.locator('.anime-environment img').evaluateAll(imgs=>imgs.every(img=>img.src.endsWith('-small.webp')&&!img.srcset)),true);
+    console.log('PASS low-end device selects small art and disables effects');
     fs.writeFileSync(path.join(OUT,'session.json'),JSON.stringify({username,token}));
     console.log('Screenshots: '+OUT);
   } catch(e) {

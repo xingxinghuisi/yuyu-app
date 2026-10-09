@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v19-archipelago';
+var CACHE_NAME = 'yuyu-v21-anime';
 var ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,15 @@ var ASSETS = [
   './map-model.js',
   './map.js',
   './map.css',
+  './anime.css',
+  './map-art.js',
+  './assets/anime/sea-small.webp',
+  './assets/anime/sakura-small.webp',
+  './assets/anime/torii-small.webp',
+  './assets/anime/fuji-small.webp',
+  './assets/anime/maple-small.webp',
+  './assets/anime/snow-small.webp',
+  './assets/anime/traveler.webp',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './manifest.json'
