@@ -10,6 +10,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="explore-map.css">
 </head>
 <body>
 
@@ -69,6 +70,9 @@
 <!-- 轻提示 -->
 <div id="toast" class="toast hidden" role="status"></div>
 
+<!-- v1.2 探索页群岛海图：配置 + 页面（需在 app.js 之前加载，app.js 启动时直接注册路由） -->
+<script src="explore-config.js"></script>
+<script src="explore-map.js"></script>
 <script src="app.js"></script>
 <script>
 // 注册 Service Worker（PWA 离线能力）；每次启动主动检查更新，避免旧前端滞留

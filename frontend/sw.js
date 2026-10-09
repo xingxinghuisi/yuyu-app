@@ -1,10 +1,14 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v21';
+var CACHE_NAME = 'yuyu-v22';
 var ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './explore-config.js',
+  './explore-map.js',
+  './explore-map.css',
+  // 海图背景（map-bg 约 450–550KB、map-sky 约 36KB）不预缓存：首次进入探索页时由下方 fetch 运行时缓存
   './manifest.json'
 ];
 
