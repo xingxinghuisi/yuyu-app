@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v24';
+var CACHE_NAME = 'yuyu-v22-island-sheet';
 var ASSETS = [
   './',
   './index.html',
@@ -7,11 +7,10 @@ var ASSETS = [
   './app.js',
   './map-model.js',
   './map.js',
-  './map-art.js',
   './map.css',
   './anime.css',
-  './sheet.css',
-  // 动漫群岛小图预缓存（首屏快显）；大图与海面按需运行时缓存
+  './map-sheet.css',
+  './map-art.js',
   './assets/anime/sea-small.webp',
   './assets/anime/sakura-small.webp',
   './assets/anime/torii-small.webp',
@@ -19,6 +18,8 @@ var ASSETS = [
   './assets/anime/maple-small.webp',
   './assets/anime/snow-small.webp',
   './assets/anime/traveler.webp',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   './manifest.json'
 ];
 
@@ -51,6 +52,7 @@ self.addEventListener('fetch', function (event) {
   try {
     var url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
+    if (url.pathname === '/api' || url.pathname.indexOf('/api/') === 0) return;
   } catch (e) { return; }
 
   event.respondWith(
