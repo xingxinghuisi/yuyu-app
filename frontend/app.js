@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.3.1';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -1329,6 +1329,25 @@ function quizQBody(q) {
   return body;
 }
 
+/* 选中不是提交：当前题可改选，每题始终只保留最后一次选择。 */
+function bindQuizOptions(q, session) {
+  var options = $$('.option');
+  options.forEach(function (btn) {
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', function () {
+      if (session.done) return;
+      var i = parseInt(btn.getAttribute('data-i'), 10);
+      session.answers[session.idx] = { qid: q.qid, answer: String((q.options || [])[i]) };
+      session.answered = true;
+      options.forEach(function (b) {
+        b.classList.toggle('selected', b === btn);
+        b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+      });
+      $('#q-next').classList.remove('hidden');
+    });
+  });
+}
+
 /* 用刚学的 5 个词出 3 题快闪小测（v0.3） */
 function startMiniQuiz(wordIds) {
   app.innerHTML = loadingHtml('正在出 3 道小测题…');
@@ -1360,6 +1379,7 @@ function renderMiniQ() {
   var mqe = $('#btn-mq-exit');
   if (mqe) mqe.addEventListener('click', function () { MQ = null; renderStudyWord(); });
   $('#btn-mq-next').addEventListener('click', function () {
+    if (!MQ || !MQ.answered || MQ.done) return;
     if (MQ.idx === MQ.questions.length - 1) submitMiniQuiz();
     else { MQ.idx++; renderMiniQ(); }
   });
@@ -1371,20 +1391,12 @@ function bindMiniQ(q) {
   if (type === 'listening' && kana) later(function () { speak(kana, q.word_id); }, 500);
   var rp = $('#btn-replay');
   if (rp && kana) rp.addEventListener('click', function () { speak(kana, q.word_id); });
-  $$('.option').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (MQ.answered) return;
-      MQ.answered = true;
-      var i = parseInt(btn.getAttribute('data-i'), 10);
-      MQ.answers.push({ qid: q.qid, answer: String((q.options || [])[i]) });
-      btn.classList.add('selected');
-      $$('.option').forEach(function (b) { b.disabled = true; });
-      $('#q-next').classList.remove('hidden');
-    });
-  });
+  bindQuizOptions(q, MQ);
 }
 
 function submitMiniQuiz() {
+  if (!MQ || MQ.done) return;
+  MQ.done = true;
   app.innerHTML = loadingHtml('正在批改小测…');
   api('/quiz/submit', 'POST', { qid_answers: MQ.answers }).then(function (r) {
     var score = r.score || 0;
@@ -1881,19 +1893,9 @@ function renderQuizQ() {
   var rp = $('#btn-replay');
   if (rp && kana) rp.addEventListener('click', function () { speak(kana, q.word_id); });
 
-  $$('.option').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (QZ.answered) return;
-      QZ.answered = true;
-      var i = parseInt(btn.getAttribute('data-i'), 10);
-      // 记录答案（后端判分）；前端即时标出所选
-      QZ.answers.push({ qid: q.qid, answer: String((q.options || [])[i]) });
-      btn.classList.add('selected'); // 仅表示"已作答"，交卷后统一判分
-      $$('.option').forEach(function (b) { b.disabled = true; });
-      $('#q-next').classList.remove('hidden');
-    });
-  });
+  bindQuizOptions(q, QZ);
   $('#btn-q-next').addEventListener('click', function () {
+    if (!QZ || !QZ.answered || QZ.done) return;
     if (QZ.idx === QZ.questions.length - 1) submitQuiz();
     else { QZ.idx++; renderQuizQ(); }
   });
