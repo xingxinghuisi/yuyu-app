@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.3.1';
+var APP_VERSION = '1.3.2';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -305,23 +305,36 @@ function speakTts(text) {
     window.speechSynthesis.speak(u);
   } catch (e) { /* 忽略 */ }
 }
-/* 优先播放 egg rolls 原音频，失败时由服务端或浏览器回退合成语音。 */
+/* 服务端优先播放已安装的 No.7；缺失/失败时回退原音频或系统 TTS。 */
 var _audioEl = null;
-function speak(text, wordId) {
+function speak(text, wordId, audioUrl) {
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
   if (_audioEl) { try { _audioEl.pause(); } catch (e) {} _audioEl = null; }
-  if (wordId) {
-    var a = new Audio('/api/audio/' + encodeURIComponent(wordId) + '.mp3');
+  if (wordId || audioUrl) {
+    var url = audioUrl || '/api/audio/' + encodeURIComponent(wordId) + '.mp3';
+    var a = new Audio(url + '?v=' + APP_VERSION);
     _audioEl = a;
     /* v0.8.1: 真人 MP3 也服从「我的页→发音设置→语速》(默认 0.8x) */
     try { a.playbackRate = getVoicePref().rate || 1; } catch (e) {}
     a.onended = function () { if (_audioEl === a) _audioEl = null; };
-    a.onerror = function () { if (_audioEl === a) { _audioEl = null; speakTts(text); } };
-    try { a.play().catch(function () { speakTts(text); }); } catch (e) { speakTts(text); }
+    var fallback = function () {
+      if (_audioEl !== a) return;
+      _audioEl = null;
+      try { a.pause(); } catch (e) {}
+      speakTts(text);
+    };
+    a.onerror = fallback;
+    try { a.play().catch(fallback); } catch (e) { fallback(); }
     return;
   }
   speakTts(text);
 }
+/* 覆盖新词、复习及详解中动态出现的例句。 */
+document.addEventListener('click', function (event) {
+  var button = event.target.closest('.example-speak');
+  if (!button) return;
+  speak(button.getAttribute('data-text'), null, button.getAttribute('data-audio') || null);
+});
 /* 初始化发音设置 UI（我的页） */
 function initVoiceSettings() {
   var sel = $('#sel-voice'), range = $('#range-rate'), rval = $('#rate-val'), test = $('#btn-voice-test');
@@ -1161,10 +1174,17 @@ function exampleHtml(w) {
   var ex = (w.examples && w.examples[0]) || null;
   if (!ex) return '';
   return '<div class="glass example-box">' +
-    '<div class="ex-label">' + esc(ex.kind || '例句') + '</div>' +
+    '<div class="ex-label">' + esc(ex.kind || '例句') + examplePlayButton(ex) + '</div>' +
     '<div class="ex-ja">' + furiganaToRuby(ex.furigana || ex.ja) + '</div>' +
     exTransHtml(ex) +
   '</div>';
+}
+
+function examplePlayButton(ex) {
+  if (!ex.ja) return '';
+  return '<button type="button" class="btn btn-ghost btn-sm example-speak" ' +
+    'style="margin-left:8px" aria-label="朗读例句" data-text="' + esc(ex.ja) +
+    '" data-audio="' + esc(ex.audio_url || '') + '">播放例句</button>';
 }
 
 /* 题目区 HTML（study 与 quiz 复用）
@@ -1705,7 +1725,7 @@ function openWordDetail(wordId) {
         '<h3 class="detail-sec-title">例句与关联表达</h3>' +
         exs.map(function (e) {
           return '<div class="detail-ex">' +
-            '<div class="ex-label">' + esc(e.kind || '例句') + '</div>' +
+            '<div class="ex-label">' + esc(e.kind || '例句') + examplePlayButton(e) + '</div>' +
             '<div class="ex-ja">' + furiganaToRuby(e.furigana || e.ja) + '</div>' +
             exTransHtml(e) +
           '</div>';
@@ -2115,9 +2135,10 @@ function renderMeVoice() {
   app.innerHTML = meSubHead('发音设置') +
     '<div class="glass about-card">' +
       '<h3>发音设置</h3>' +
-      '<div style="margin-bottom:10px"><label class="muted" style="font-size:13px">发音人</label>' +
+      '<p class="muted">单词和例句优先使用已安装的 VOICEVOX:No.7 合成语音。未安装或音频不可用时自动回退。</p>' +
+      '<div style="margin-bottom:10px"><label class="muted" style="font-size:13px">系统回退发音人</label>' +
       '<select id="sel-voice" class="input" style="width:100%;margin-top:4px"><option value="">系统默认</option></select></div>' +
-      '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span> <span class="muted" style="font-size:11px">（真人发音 · 系统 TTS 均适用）</span></label>' +
+      '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span> <span class="muted" style="font-size:11px">（音频 · 系统 TTS 均适用）</span></label>' +
       '<input type="range" id="range-rate" min="0.5" max="1.2" step="0.1" value="0.8" style="width:100%">' +
       '<div style="display:flex;justify-content:space-between;font-size:11px" class="muted"><span>慢</span><span>快</span></div></div>' +
       '<button class="btn btn-ghost btn-sm" id="btn-voice-test" style="margin-top:8px">试听</button>' +
@@ -2294,7 +2315,7 @@ function renderMeAbout() {
       '词汇、分级、中文释义及例句：<a href="https://github.com/5mdld/anki-jlpt-decks" target="_blank" rel="noopener noreferrer">egg rolls · JLPT N1–N5 一万词 v3.5</a>。<br>' +
       '采用 <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener noreferrer">CC BY-NC 4.0</a>，仅限非商业使用，版权归原作者及各自贡献者。<br>' +
       '本项目转换了数据格式，保留不同义项，并迁移旧词条的学习记录。分级为参考范围。<br>' +
-      '单词优先播放原项目音频；据作者说明，绝大部分由真人录制。网络不可用时回退合成语音。<br>' +
+      '单词与例句语音：<a href="https://voicevox.hiroshiba.jp/product/number_seven/" target="_blank" rel="noopener noreferrer">VOICEVOX:No.7</a>（合成语音）。音频包未安装或单词音频缺失时保留原项目音频回退；播放失败时使用系统 TTS。<br>' +
       '新源提供简繁中文，不含英文释义；选择英语时无英文的内容显示中文。<br>' +
       '汉字资料仍来自 OpenJLPT / JMdict（CC BY-SA 4.0），独立于上述词汇内容。<br>' +
       '语屿 Kotoba · 每天十五分钟，筑一座日语之岛。<br>' +

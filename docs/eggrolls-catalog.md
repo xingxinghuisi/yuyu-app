@@ -37,7 +37,7 @@
 
 10,641 条笔记均有单词音频引用，对应 10,599 个不同文件，均在固定版本媒体树中找到。
 作者说明单词绝大部分为真人录制，例句是 VOICEPEAK 合成；本次只接入单词音频。
-首次播放按需下载到 `/data/audio-cache/eggrolls/`，核对 Git blob SHA-1 后才保存；之后从本地缓存播放。
+未安装 No.7 音频包时，首次播放按需下载到 `/data/audio-cache/eggrolls/`，核对 Git blob SHA-1 后才保存；之后从本地缓存播放。v1.3.2 起支持优先播放已安装的 No.7 单词与例句音频，见 [跨 VPS 音频部署](voicevox-audio.md)。
 冷缓存需要服务器能访问 `raw.githubusercontent.com`，失败时回退已有合成语音或浏览器 TTS，不声称回退也是真人。
 
 ## 验证与恢复

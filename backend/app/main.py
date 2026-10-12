@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth, seed_db, srs, vocab_catalog, source_audio
+from . import auth, seed_db, srs, vocab_catalog, source_audio, voicevox_audio
 
 # ---------------- 基础 ----------------
 
@@ -139,6 +139,7 @@ def word_to_dict(row, conn: sqlite3.Connection, lang: str = "zh") -> dict:
     ).fetchall()
     examples = [
         {"ja": e["sentence_ja"], "furigana": e["furigana"],
+         "audio_url": f'/api/audio/examples/{voicevox_audio.example_key(e["sentence_ja"])}.mp3',
          "en": e["sentence_en"], "zh": e["sentence_zh"],
          "kind": e["source"].removeprefix("eggrolls-") if e["source"].startswith("eggrolls-") else "例句",
          "display_sentence": example_display_sentence(e, lang)}
@@ -1103,7 +1104,7 @@ def stats_summary(user: dict = Depends(current_user)):
         conn.close()
 
 
-# ---------------- 单词音频：上游录音优先，旧合成语音兜底 ----------------
+# ---------------- 音频：已安装的 No.7 优先，保留原音频与 TTS 回退 ----------------
 
 def _audio_dir() -> Path:
     """AUDIO_DIR 环境变量优先；默认找 backend/data/audio（开发）或 /app/app/data/audio（容器）。"""
@@ -1123,19 +1124,24 @@ def _audio_dir() -> Path:
 
 @app.get("/api/audio/{word_id}.mp3", include_in_schema=False)
 def word_audio(word_id: str):
-    """上游音频缓存到 /data，失败时保留合成语音或浏览器 TTS 回退。"""
+    """No.7 包就绪后优先播放；未安装时保留原有播放路径。"""
     # word_id 仅允许安全字符，防止路径穿越
     if not word_id or not all(ch.isalnum() or ch in "-_" for ch in word_id):
         raise HTTPException(status_code=404, detail="not found")
     conn = get_db()
     try:
         canonical = vocab_catalog.resolve_word_id(conn, word_id)
+        generated = voicevox_audio.active_audio(Path(db_path()).parent, f'words/{canonical}.mp3')
+        if generated is not None:
+            return FileResponse(str(generated), media_type='audio/mpeg',
+                                headers={'X-Audio-Source': 'voicevox-no7', 'Cache-Control': 'no-cache'})
         exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name='word_audio_sources'").fetchone()
         source = conn.execute('SELECT * FROM word_audio_sources WHERE word_id=?', (canonical,)).fetchone() if exists else None
         if source is not None:
             try:
                 cached = source_audio.get_audio(dict(source), Path(db_path()).parent / 'audio-cache' / 'eggrolls')
-                return FileResponse(str(cached), media_type='audio/mpeg', headers={'X-Audio-Source': 'eggrolls-original'})
+                return FileResponse(str(cached), media_type='audio/mpeg',
+                                    headers={'X-Audio-Source': 'eggrolls-original', 'Cache-Control': 'no-cache'})
             except (OSError, ValueError):
                 pass
         candidates = [word_id, canonical]
@@ -1145,8 +1151,20 @@ def word_audio(word_id: str):
     for candidate in dict.fromkeys(candidates):
         p = _audio_dir() / f"{candidate}.mp3"
         if p.is_file():
-            return FileResponse(str(p), media_type="audio/mpeg", headers={'X-Audio-Source': 'legacy-synthesized'})
+            return FileResponse(str(p), media_type="audio/mpeg",
+                                headers={'X-Audio-Source': 'legacy-synthesized', 'Cache-Control': 'no-cache'})
     raise HTTPException(status_code=404, detail="no audio")
+
+
+@app.get('/api/audio/examples/{audio_key}.mp3', include_in_schema=False)
+def example_audio(audio_key: str):
+    if len(audio_key) != 64 or any(ch not in '0123456789abcdef' for ch in audio_key):
+        raise HTTPException(status_code=404, detail='not found')
+    generated = voicevox_audio.active_audio(Path(db_path()).parent, f'examples/{audio_key}.mp3')
+    if generated is None:
+        raise HTTPException(status_code=404, detail='no example audio')
+    return FileResponse(str(generated), media_type='audio/mpeg',
+                        headers={'X-Audio-Source': 'voicevox-no7', 'Cache-Control': 'no-cache'})
 
 
 # ---------------- 前端静态托管 (最后挂载) ----------------

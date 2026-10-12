@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v26-quiz-answer-change';
+var CACHE_NAME = 'yuyu-v27-no7-example-audio';
 var ASSETS = [
   './',
   './index.html',
