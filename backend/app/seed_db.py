@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
   pro           INTEGER DEFAULT 0,
   lang          TEXT DEFAULT 'zh',
   daily_goal    INTEGER DEFAULT 30,
+  study_batch_size INTEGER DEFAULT 30,
   created_at    TEXT NOT NULL
 );
 
@@ -389,6 +390,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "daily_goal" not in _column_names(conn, "users"):
         conn.execute("ALTER TABLE users ADD COLUMN daily_goal INTEGER DEFAULT 30")
     conn.execute("UPDATE users SET daily_goal=30 WHERE daily_goal IS NULL OR daily_goal < 1 OR daily_goal > 200")
+    if "study_batch_size" not in _column_names(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN study_batch_size INTEGER DEFAULT 30")
+    conn.execute("UPDATE users SET study_batch_size=30 WHERE study_batch_size IS NULL OR study_batch_size < 1 OR study_batch_size > 200")
     if "zh_source" not in _column_names(conn, "words"):
         conn.execute("ALTER TABLE words ADD COLUMN zh_source TEXT")
     # v0.6: 考频 / 教材 / 课号

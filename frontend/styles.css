@@ -1150,11 +1150,16 @@ html[data-theme="dark"] .grade-fuzzy { color: var(--gold); }
 .study-grade-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .study-graded { text-align: center; font-size: 14px; color: var(--ink-soft); margin-bottom: 12px; }
 .study-graded b { color: var(--ink); }
-/* 每日目标步进器 */
-.goal-stepper { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
-.goal-stepper .btn { min-width: 44px; }
-.goal-val { font-size: 16px; }
-.goal-val b { font-size: 26px; }
+/* 学习词数：手机数字键盘与桌面键盘均可直接输入。 */
+.study-count-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.study-count-input {
+  width: 110px; min-height: 48px; padding: 6px 12px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  color: var(--ink); font: inherit; font-size: 26px; font-weight: 700;
+}
+.study-count-input:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+.study-count-input:disabled { opacity: .6; }
 /* v0.8 生词本星标 */
 .star-btn {
   position: absolute; top: 12px; right: 14px;

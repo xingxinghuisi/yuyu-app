@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.3.2';
+var APP_VERSION = '1.3.3';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -2159,15 +2159,40 @@ function renderMeStudy() {
       '<p class="muted seg-note">释义与例句将按所选语言展示，切换后自动刷新页面。</p>' +
     '</div>' +
 
-    '<div class="glass setting-card">' +
-      '<h3>每日学习目标</h3>' +
-      '<div class="goal-stepper">' +
-        '<button class="btn btn-ghost" id="goal-minus" aria-label="减少">−</button>' +
-        '<span class="goal-val"><b id="goal-num">30</b><span class="muted"> 词 / 天</span></span>' +
-        '<button class="btn btn-ghost" id="goal-plus" aria-label="增加">＋</button>' +
+    '<form id="study-settings-form">' +
+      '<div class="glass setting-card">' +
+        '<h3><label for="batch-size-num">每次学习词数</label></h3>' +
+        '<div class="study-count-row">' +
+          '<input class="study-count-input" id="batch-size-num" type="number" inputmode="numeric" min="1" max="200" step="1" value="30" required disabled aria-describedby="batch-size-help">' +
+          '<span class="muted">词 / 次</span>' +
+        '</div>' +
+        '<p class="muted seg-note" id="batch-size-help">输入 1–200 的整数，下次开始学习时生效。剩余新词不足时，按实际数量安排。</p>' +
       '</div>' +
-      '<p class="muted seg-note">1–200 之间，首页今日进度环按此目标计算。</p>' +
-    '</div>';
+      '<div class="glass setting-card">' +
+        '<h3><label for="goal-num">每日学习目标</label></h3>' +
+        '<div class="study-count-row">' +
+          '<input class="study-count-input" id="goal-num" type="number" inputmode="numeric" min="1" max="200" step="1" value="30" required disabled aria-describedby="daily-goal-help">' +
+          '<span class="muted">词 / 天</span>' +
+        '</div>' +
+        '<p class="muted seg-note" id="daily-goal-help">输入 1–200 的整数，用于计算首页今日进度，可与每次学习词数分别设置。</p>' +
+      '</div>' +
+      '<button class="btn btn-primary" id="study-settings-save" type="submit" disabled>保存设置</button>' +
+      '<p class="muted seg-note" id="study-settings-status" role="status" aria-live="polite">正在读取学习设置…</p>' +
+    '</form>';
+
+  var settingsForm = $('#study-settings-form');
+  var goalInput = $('#goal-num'), batchInput = $('#batch-size-num');
+  var saveButton = $('#study-settings-save'), status = $('#study-settings-status');
+  var settingsBusy = true;
+  function setSettingsBusy(busy) {
+    settingsBusy = busy;
+    goalInput.disabled = batchInput.disabled = saveButton.disabled = busy;
+    settingsForm.setAttribute('aria-busy', String(busy));
+  }
+  function paintCounts(me) {
+    goalInput.value = me.daily_goal || 30;
+    batchInput.value = me.study_batch_size || 30;
+  }
 
   function paintLangSeg(lang) {
     $$('#lang-seg button').forEach(function (b) {
@@ -2176,40 +2201,34 @@ function renderMeStudy() {
   }
   paintLangSeg(userLang());
 
-  // 回显语言偏好与每日目标
+  // 读取账号设置后再开放编辑，避免加载结果覆盖用户正在输入的数字。
   api('/auth/me').then(function (me) {
     if (me.lang === 'zh' || me.lang === 'en') {
       localStorage.setItem(LANG_KEY, me.lang);
       paintLangSeg(me.lang);
     }
-    paintGoal(me.daily_goal || 30);
-  }).catch(function () { /* 忽略回显失败 */ });
-
-  // 每日学习目标步进器：PUT /api/auth/profile {daily_goal}
-  var goalTimer = null;
-  function paintGoal(v) {
-    v = Math.max(1, Math.min(200, parseInt(v, 10) || 30));
-    var el = $('#goal-num');
-    if (el) el.textContent = v;
-    return v;
-  }
-  function saveGoal(v) {
-    v = paintGoal(v);
-    if (goalTimer) clearTimeout(goalTimer);
-    goalTimer = setTimeout(function () {
-      api('/auth/profile', 'PUT', { daily_goal: v }).then(function () {
-        toast('每日目标已设为 ' + v + ' 词');
-      }).catch(function (err) {
-        toast((err && err.message) || '保存失败');
-      });
-    }, 600);
-  }
-  var gm = $('#goal-minus'), gp = $('#goal-plus');
-  if (gm) gm.addEventListener('click', function () {
-    saveGoal((parseInt($('#goal-num').textContent, 10) || 30) - 1);
+    paintCounts(me);
+    setSettingsBusy(false);
+    status.textContent = '修改后点击“保存设置”。';
+  }).catch(function () {
+    status.textContent = '读取学习设置失败，请刷新页面重试。';
   });
-  if (gp) gp.addEventListener('click', function () {
-    saveGoal((parseInt($('#goal-num').textContent, 10) || 30) + 1);
+
+  settingsForm.addEventListener('submit', function (event) {
+    event.preventDefault();
+    if (settingsBusy || !settingsForm.reportValidity()) return;
+    var values = { daily_goal: Number(goalInput.value), study_batch_size: Number(batchInput.value) };
+    setSettingsBusy(true);
+    status.textContent = '正在保存…';
+    api('/auth/profile', 'PUT', values).then(function (me) {
+      paintCounts(me);
+      status.textContent = '已保存，每次学习 ' + me.study_batch_size + ' 词，每日目标 ' + me.daily_goal + ' 词。';
+      if (settingsForm.isConnected) toast('学习设置已保存');
+    }).catch(function (err) {
+      status.textContent = '保存失败，请重试。' + ((err && err.message) || '');
+    }).then(function () {
+      setSettingsBusy(false);
+    });
   });
 
   // 语言切换：PUT /api/auth/profile {lang}，成功后刷新页面重拉数据

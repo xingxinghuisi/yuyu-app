@@ -94,6 +94,7 @@ def me_dict(row: dict) -> dict:
         "pro": row["pro"],
         "lang": row.get("lang") or "zh",
         "daily_goal": row.get("daily_goal") or 30,
+        "study_batch_size": row.get("study_batch_size") or 30,
         "created_at": row["created_at"],
     }
 
@@ -225,6 +226,7 @@ class ProfileIn(BaseModel):
     phone: str | None = None
     lang: str | None = None
     daily_goal: int | None = None
+    study_batch_size: int | None = Field(default=None, ge=1, le=200, strict=True)
 
 
 class StudyPlanIn(BaseModel):
@@ -337,6 +339,8 @@ def update_profile(body: ProfileIn, user: dict = Depends(current_user)):
         if dg < 1 or dg > 200:
             raise HTTPException(status_code=400, detail="invalid daily_goal: must be 1-200")
         updates["daily_goal"] = dg
+    if body.study_batch_size is not None:
+        updates["study_batch_size"] = body.study_batch_size
     conn = get_db()
     try:
         if updates:
@@ -465,6 +469,7 @@ def study_plan(body: StudyPlanIn | None = None, user: dict = Depends(current_use
     if order not in ("seq", "shuffle"):
         raise HTTPException(status_code=400, detail="invalid order: must be 'seq' or 'shuffle'")
     book_id = (body.book_id if body else None) or None
+    batch_size = user.get("study_batch_size") or 30
     lang = user.get("lang") or "zh"
     ordering = "ORDER BY bw.sort_order" if order == "seq" else "ORDER BY RANDOM()"
     conn = get_db()
@@ -477,16 +482,16 @@ def study_plan(body: StudyPlanIn | None = None, user: dict = Depends(current_use
                 f"""SELECT w.* FROM words w
                    JOIN book_words bw ON bw.word_id = w.id
                    WHERE bw.book_id=? AND w.id NOT IN (SELECT word_id FROM user_words WHERE user_id=?)
-                   {ordering} LIMIT 30""",
-                (book_id, user["id"]),
+                   {ordering} LIMIT ?""",
+                (book_id, user["id"], batch_size),
             ).fetchall()
         else:
             ordering_legacy = "ORDER BY kana" if order == "seq" else "ORDER BY RANDOM()"
             rows = conn.execute(
                 f"""SELECT * FROM words WHERE level=?
                    AND id NOT IN (SELECT word_id FROM user_words WHERE user_id=?)
-                   {ordering_legacy} LIMIT 30""",
-                (level, user["id"]),
+                   {ordering_legacy} LIMIT ?""",
+                (level, user["id"], batch_size),
             ).fetchall()
         words = [word_to_dict(r, conn, lang) for r in rows]
         today_learned = conn.execute(
@@ -494,7 +499,8 @@ def study_plan(body: StudyPlanIn | None = None, user: dict = Depends(current_use
             " WHERE user_id=? AND substr(created_at,1,10)=?",
             (user["id"], today_str()),
         ).fetchone()["c"]
-        return {"words": words, "daily_goal": user.get("daily_goal") or 30, "today_learned": today_learned}
+        return {"words": words, "daily_goal": user.get("daily_goal") or 30,
+                "study_batch_size": batch_size, "today_learned": today_learned}
     finally:
         conn.close()
 
