@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth, seed_db, srs, vocab_catalog, source_audio, voicevox_audio
+from . import auth, seed_db, srs, vocab_catalog, source_audio, voicevox_audio, private_exams
 
 # ---------------- 基础 ----------------
 
@@ -1172,6 +1172,8 @@ def example_audio(audio_key: str):
     return FileResponse(str(generated), media_type='audio/mpeg',
                         headers={'X-Audio-Source': 'voicevox-no7', 'Cache-Control': 'no-cache'})
 
+
+app.include_router(private_exams.create_router(current_user))
 
 # ---------------- 前端静态托管 (最后挂载) ----------------
 

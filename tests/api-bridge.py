@@ -11,7 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT / '.runtime'), str(ROOT / 'backend'), str(ROOT)]
-os.environ['DATA_DIR'] = str(ROOT / 'data' / 'map-tests')
+os.environ['DATA_DIR'] = os.environ.get('TEST_DATA_DIR', str(ROOT / 'data' / 'map-tests'))
 os.environ['JWT_SECRET'] = 'in-process-test-secret-never-used-in-production'
 from fastapi.testclient import TestClient
 from app.main import app

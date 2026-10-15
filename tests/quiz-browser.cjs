@@ -92,6 +92,11 @@ async function main() {
         const state = flow === 'mini' ? 'MQ' : 'QZ';
         const next = flow === 'mini' ? '#btn-mq-next' : '#btn-q-next';
         const before = submissions.length;
+        if (flow === 'mini') {
+          // Mini quizzes belong to a live learning batch, including its account and cursor.
+          await page.evaluate(() => startStudyFlow());
+          await page.locator('#word-card').waitFor();
+        }
         await page.evaluate(({ flow, wordIds }) => {
           if (flow === 'mini') startMiniQuiz(wordIds);
           else startQuiz('N5', 3, 'normal');

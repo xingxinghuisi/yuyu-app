@@ -11,9 +11,14 @@ function worker(overrides={}) {
 }
 test('authenticated API GETs and writes always use the network, never SW cache',()=>{
   const {handlers}=worker();let intercepted=false;
-  for(const [method,url] of [['GET','https://kotoba.test/api/home/summary'],['GET','https://kotoba.test/api/books'],['GET','https://kotoba.test/api/review/due'],['POST','https://kotoba.test/api/study/answer']]) {
+  for(const [method,url] of [['GET','https://kotoba.test/api/home/summary'],['GET','https://kotoba.test/api/books'],['GET','https://kotoba.test/api/review/due'],['POST','https://kotoba.test/api/study/answer'],['GET','https://kotoba.test/api/private-exams/fixture/audio'],['GET','https://kotoba.test/api/private-exams/fixture/assets/paper/01.webp']]) {
     handlers.fetch({request:{method,url},respondWith:()=>intercepted=true});
   }
+  assert.equal(intercepted,false);
+});
+test('the local preview session entry is never served from or written to the SW cache',()=>{
+  const {handlers}=worker();let intercepted=false;
+  handlers.fetch({request:{method:'GET',url:'https://kotoba.test/preview-exam'},respondWith:()=>intercepted=true});
   assert.equal(intercepted,false);
 });
 test('the offline shell list contains existing map resources',()=>{

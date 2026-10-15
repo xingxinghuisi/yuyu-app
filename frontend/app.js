@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.3.3';
+var APP_VERSION = '1.4.0';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -369,6 +369,7 @@ function initVoiceSettings() {
 var TOKEN_KEY = 'yuyu_token';
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function logout() {
+  fetch('/api/private-exams/media-session', { method: 'DELETE', credentials: 'same-origin' }).catch(function () {});
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem('yuyu_username');
   location.hash = '#/login';
@@ -446,6 +447,8 @@ function navigate() {
   if (r === 'login' && authed) r = 'home';            // 已登录不再看登录页
   if (currentRoute() !== r) { location.hash = '#/' + r; return; }
   clearTimers();
+  stopStudyFlow();
+  if (window.privateExamCleanup) window.privateExamCleanup();
   dismissArchipelagoSheet();
   stopAmbientPetals(); // 离开登录页即停止缓飘樱花
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
@@ -454,7 +457,7 @@ function navigate() {
   // v1.0.1: 路由切换时底栏重置为显示状态
   if (typeof tabbarAutoHide !== 'undefined') tabbarAutoHide.reset();
   // v1.0.2: 学习/复习/考试全屏——底栏完全隐藏，退出到其他路由后恢复
-  var FULLSCREEN_ROUTES = { study: 1, voyage: 1, review: 1, quiz: 1 };
+  var FULLSCREEN_ROUTES = { study: 1, voyage: 1, review: 1, quiz: 1, 'exams/run': 1, 'exams/result': 1 };
   document.body.classList.toggle('tabbar-full-hide', !!FULLSCREEN_ROUTES[r]);
   routes[r]();
   // v1.0: 路由级页面进入动画（右滑入+淡入）
@@ -940,6 +943,73 @@ var TYPE_LABEL = {
 };
 
 var ST = null; // 学习会话状态
+var studyFlowGeneration = 0;
+var studySaveWarning = false;
+
+/* 本机按账号、词书保存整轮队列；不再用剩余新词重新拼出一轮。 */
+function studyOwner() {
+  try {
+    var payload = getToken().split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    var sub = JSON.parse(atob(payload)).sub;
+    return typeof sub === 'string' && /^\d+$/.test(sub) ? sub : null;
+  } catch (e) { return null; }
+}
+function studyCheckpointKey(bookId) {
+  var owner = studyOwner();
+  return owner ? 'yuyu_study_v1:' + owner + ':' + encodeURIComponent(bookId) : null;
+}
+function readStudyCheckpoint(bookId) {
+  var key = studyCheckpointKey(bookId);
+  if (!key) return null;
+  try {
+    var s = JSON.parse(localStorage.getItem(key));
+    if (!s || s.version !== 1 || s.owner !== studyOwner() || s.bookId !== bookId ||
+        ['seq', 'shuffle'].indexOf(s.order) === -1 || !Array.isArray(s.words) ||
+        !s.words.length || s.words.length > 200 || !Number.isInteger(s.idx) ||
+        !Number.isInteger(s.done) || s.idx < 0 || s.idx > s.done ||
+        s.done >= s.words.length || s.counted !== s.done ||
+        !s.grades || typeof s.grades !== 'object' || !Array.isArray(s.batch)) return null;
+    var ids = s.words.map(function (w) { return w && w.id; });
+    if (ids.some(function (id) { return typeof id !== 'string' || !id; }) ||
+        new Set(ids).size !== ids.length || s.batch.length > 5 ||
+        s.batch.length > s.done || s.batch.some(function (id, i) {
+          return id !== ids[s.done - s.batch.length + i];
+        }) || ids.slice(0, s.done).some(function (id) {
+          return s.grades[id] !== 1 && s.grades[id] !== 4;
+        })) return null;
+    s._checkpointKey = key;
+    return s;
+  } catch (e) { return null; }
+}
+function saveStudyCheckpoint() {
+  if (!ST || !ST._checkpointKey) return;
+  try {
+    if (ST.done >= ST.words.length) {
+      localStorage.removeItem(ST._checkpointKey);
+      return;
+    }
+    localStorage.setItem(ST._checkpointKey, JSON.stringify({
+      version: 1, owner: ST.owner, bookId: ST.bookId, bookName: ST.bookName, order: ST.order,
+      words: ST.words, idx: ST.idx, done: ST.done, counted: ST.counted,
+      goal: ST.goal, baseLearned: ST.baseLearned, batch: ST.batch, grades: ST.grades
+    }));
+  } catch (e) {
+    if (!studySaveWarning) {
+      studySaveWarning = true;
+      toast('浏览器无法保存学习进度，请检查可用存储空间');
+    }
+  }
+}
+function stopStudyFlow() {
+  saveStudyCheckpoint();
+  studyFlowGeneration++;
+  ST = null;
+  MQ = null;
+  _studyGrading = false;
+}
+function studyFlowActive(session, generation) {
+  return !!session && ST === session && studyFlowGeneration === generation && session.owner === studyOwner();
+}
 
 /* 书架：学习方式上下文（选书弹窗写入，plan 调用使用） */
 var StudyCtx = { bookId: 'level-n5', bookName: 'N5 标准词', order: 'seq' };
@@ -952,6 +1022,7 @@ var SHELF_CATS = [
 
 /* #/study 入口：书架（顶部带今日 hub 条：进度/打卡/岛屿） */
 function renderStudy() {
+  stopStudyFlow();
   app.innerHTML = loadingHtml('正在取书…');
   Promise.all([
     api('/books').catch(function () { return null; }),
@@ -996,6 +1067,7 @@ function renderShelf(books, summary, isl) {
   }).filter(function (g) { return g.books.length > 0; });
 
   function cardHtml(b, idx) {
+    var saved = readStudyCheckpoint(b.id);
     var pct = 0;
     if (typeof b.progress === 'number') pct = b.progress;
     else if (b.total > 0) pct = (b.studied || 0) / b.total;
@@ -1007,6 +1079,7 @@ function renderShelf(books, summary, isl) {
       '<div class="book-main">' +
         '<span class="book-lv">' + esc(b.name) + '</span>' +
         (b.description ? '<span class="book-desc">' + esc(b.description) + '</span>' : '') +
+        (saved ? '<span class="book-desc">继续上次 · ' + (saved.idx + 1) + ' / ' + saved.words.length + '</span>' : '') +
       '</div>' +
       '<div class="book-side">' +
         '<span class="book-count">' + esc(countTxt) + '</span>' +
@@ -1060,6 +1133,12 @@ function renderShelf(books, summary, isl) {
       var bid = el.getAttribute('data-bid');
       var bname = el.getAttribute('data-bname');
       vibrate(10);
+      var saved = readStudyCheckpoint(bid);
+      if (saved) {
+        StudyCtx = { bookId: bid, bookName: bname, order: saved.order };
+        startStudyFlow();
+        return;
+      }
       chooseOrder(bname).then(function (order) {
         if (!order) return;
         StudyCtx.bookId = bid;
@@ -1096,8 +1175,20 @@ function chooseOrder(bookName) {
 
 /* 按 StudyCtx 拉取学习计划，进入背词流 */
 function startStudyFlow() {
+  stopStudyFlow();
+  var generation = studyFlowGeneration;
+  var owner = studyOwner();
+  var saved = readStudyCheckpoint(StudyCtx.bookId);
+  if (saved) {
+    ST = saved;
+    StudyCtx.order = saved.order;
+    if (ST.idx < ST.done || !maybeMiniQuiz()) renderStudyWord();
+    toast('已恢复上次学习进度');
+    return;
+  }
   app.innerHTML = loadingHtml('正在准备今日新词…');
   api('/study/plan', 'POST', { book_id: StudyCtx.bookId, order: StudyCtx.order }).then(function (d) {
+    if (generation !== studyFlowGeneration || owner !== studyOwner()) return;
     var words = d.words || [];
     if (!words.length) {
       app.innerHTML = '<div class="empty-state">' + sakuraArt(110) +
@@ -1109,6 +1200,8 @@ function startStudyFlow() {
       return;
     }
     ST = {
+      owner: owner, bookId: StudyCtx.bookId, bookName: StudyCtx.bookName, order: StudyCtx.order,
+      _checkpointKey: studyCheckpointKey(StudyCtx.bookId),
       words: words,
       idx: 0,
       done: 0,       // 已评分词数（frontier）；idx < done 时为回看模式
@@ -1120,6 +1213,7 @@ function startStudyFlow() {
     };
     renderStudyWord();
   }).catch(function (err) {
+    if (generation !== studyFlowGeneration || owner !== studyOwner()) return;
     app.innerHTML = '<div class="loading">加载失败：' + esc(err.message) +
       '<br><br><button class="btn btn-ghost" onclick="location.hash=\'#/home\'">返回首页</button></div>';
   });
@@ -1137,6 +1231,7 @@ function maybeMiniQuiz() {
   if (ST.counted > 0 && ST.counted % 5 === 0 && ST.batch.length) {
     var ids = ST.batch.slice();
     ST.batch = [];
+    saveStudyCheckpoint();
     startMiniQuiz(ids);
     return true;
   }
@@ -1193,6 +1288,7 @@ function examplePlayButton(ex) {
    认识 = grade 4 (FSRS Good)；不认识 = grade 1 (FSRS Again)。
    顶部「← 上一词」可回看，回看仅展示不重复计分（FSRS 状态机不受影响）。 */
 function renderStudyWord() {
+  saveStudyCheckpoint();
   var w = ST.words[ST.idx];
   if (!w) { renderStudyDone(); return; }
   var history = ST.idx < ST.done; // 回看模式
@@ -1232,7 +1328,7 @@ function renderStudyWord() {
   var bb = $('#btn-back');
   if (bb) bb.addEventListener('click', function () { if (ST.idx > 0) { ST.idx--; renderStudyWord(); } });
   var exb = $('#btn-exit');
-  if (exb) exb.addEventListener('click', function () { ST = null; if (location.hash !== '#/study') location.hash = '#/study'; navigate(); });
+  if (exb) exb.addEventListener('click', function () { stopStudyFlow(); if (location.hash !== '#/study') location.hash = '#/study'; navigate(); });
   var fw = $('#btn-fwd');
   if (fw) fw.addEventListener('click', function () { ST.idx++; renderStudyWord(); });
   if (!history) {
@@ -1244,7 +1340,8 @@ function renderStudyWord() {
 /* 新词评分：认识=4(Good) / 不认识=1(Again) */
 var _studyGrading = false;
 function studyGrade(w, know) {
-  if (_studyGrading) return;
+  if (_studyGrading || !ST || ST.idx !== ST.done || ST.words[ST.idx] !== w) return;
+  var session = ST, generation = studyFlowGeneration;
   _studyGrading = true;
   var grade = know ? 4 : 1;
   api('/study/answer', 'POST', { word_id: w.id, grade: grade }).catch(function () { /* 离线也继续 */ });
@@ -1253,7 +1350,9 @@ function studyGrade(w, know) {
   ST.grades[w.id] = grade;
   ST.counted++; ST.batch.push(w.id);
   ST.idx++; ST.done++;
+  saveStudyCheckpoint();
   later(function () {
+    if (!studyFlowActive(session, generation)) return;
     _studyGrading = false;
     if (maybeMiniQuiz()) return; // 每 5 词快闪小测
     renderStudyWord();
@@ -1370,13 +1469,16 @@ function bindQuizOptions(q, session) {
 
 /* 用刚学的 5 个词出 3 题快闪小测（v0.3） */
 function startMiniQuiz(wordIds) {
+  var session = ST, generation = studyFlowGeneration;
   app.innerHTML = loadingHtml('正在出 3 道小测题…');
   api('/quiz/start', 'POST', { word_ids: wordIds, count: 3 }).then(function (d) {
+    if (!studyFlowActive(session, generation)) return;
     var qs = d.questions || [];
     if (!qs.length) { toast('暂无小测题目，继续学习'); renderStudyWord(); return; }
     MQ = { questions: qs, idx: 0, answers: [], answered: false };
     renderMiniQ();
   }).catch(function (err) {
+    if (!studyFlowActive(session, generation)) return;
     toast(err.message || '小测加载失败，继续学习');
     renderStudyWord();
   });
@@ -1417,21 +1519,27 @@ function bindMiniQ(q) {
 function submitMiniQuiz() {
   if (!MQ || MQ.done) return;
   MQ.done = true;
+  var session = ST, generation = studyFlowGeneration, quiz = MQ;
   app.innerHTML = loadingHtml('正在批改小测…');
   api('/quiz/submit', 'POST', { qid_answers: MQ.answers }).then(function (r) {
+    if (!studyFlowActive(session, generation)) return;
     var score = r.score || 0;
-    var total = r.total || MQ.questions.length;
+    var total = r.total || quiz.questions.length;
     var wrongIds = r.wrong || [];
     // 错词回炉：逐个 POST /api/study/answer {grade: 0}（wrong 可能是 word_id 字符串或详情对象）
     var chain = Promise.resolve();
     wrongIds.forEach(function (x) {
       var wid = (typeof x === 'string') ? x : x.word_id;
       chain = chain.then(function () {
+        if (!studyFlowActive(session, generation)) return;
         return api('/study/answer', 'POST', { word_id: wid, grade: 0 }).catch(function () {});
       });
     });
-    chain.then(function () { renderMiniResult(score, total, wrongIds.length); });
+    chain.then(function () {
+      if (studyFlowActive(session, generation)) renderMiniResult(score, total, wrongIds.length);
+    });
   }).catch(function (err) {
+    if (!studyFlowActive(session, generation)) return;
     toast(err.message || '交卷失败，继续学习');
     renderStudyWord();
   });
@@ -1451,10 +1559,11 @@ function renderMiniResult(score, total, wrongCount) {
 }
 
 function renderStudyDone() {
+  saveStudyCheckpoint();
   celebrate();
-  var goal = (ST && ST.goal) || 30;
+  var goal = ST.words.length;
   app.innerHTML = '<div class="finish-wrap">' + sakuraArt(120) +
-    '<h2>今日 ' + goal + ' 词已学完</h2>' +
+    '<h2>本轮 ' + goal + ' 词已学完</h2>' +
     '<p>小岛又长高了一点。去复习巩固一下吧。</p>' +
     '<a href="#/review" class="btn btn-primary" style="text-decoration:none;display:block">去复习</a>' +
     '<div style="height:12px"></div>' +
@@ -2469,6 +2578,7 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 /* ================= 启动 ================= */
+if (window.registerPrivateExams) window.registerPrivateExams();
 injectSvgDefs();
 document.addEventListener('visibilitychange', function () {
   document.body.classList.toggle('map-paused', document.hidden);

@@ -1,10 +1,12 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v28-study-settings';
+var CACHE_NAME = 'yuyu-v31-study-resume';
 var ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './exams.js',
+  './exams.css',
   './map-model.js',
   './map.js',
   './map.css',
@@ -52,6 +54,8 @@ self.addEventListener('fetch', function (event) {
   try {
     var url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
+    // The loopback preview entry carries a session bootstrap and must always use the network.
+    if (url.pathname === '/preview-exam') return;
     if (url.pathname === '/api' || url.pathname.indexOf('/api/') === 0) return;
   } catch (e) { return; }
 
