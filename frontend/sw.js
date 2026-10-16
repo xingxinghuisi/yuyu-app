@@ -1,5 +1,5 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v31-study-resume';
+var CACHE_NAME = 'yuyu-v32-private-text-exams';
 var ASSETS = [
   './',
   './index.html',

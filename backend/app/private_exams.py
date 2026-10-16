@@ -1,5 +1,6 @@
 """Personal exam packs live under DATA_DIR, never under the public static mount."""
 import json
+import hashlib
 import os
 import re
 import sqlite3
@@ -57,6 +58,17 @@ def database():
         started_at REAL NOT NULL, deadline_at REAL, submitted_at REAL,
         answers TEXT NOT NULL DEFAULT '{}', marked TEXT NOT NULL DEFAULT '{}',
         cursor TEXT, audio_position REAL NOT NULL DEFAULT 0)''')
+    if 'pack_revision' not in {r[1] for r in conn.execute('PRAGMA table_info(attempts)')}:
+        try:
+            conn.execute('ALTER TABLE attempts ADD COLUMN pack_revision TEXT')
+        except sqlite3.OperationalError:
+            # Another worker may migrate the same database after our PRAGMA.
+            if 'pack_revision' not in {r[1] for r in conn.execute('PRAGMA table_info(attempts)')}:
+                conn.close()
+                raise
+    conn.execute('''CREATE TABLE IF NOT EXISTS exam_versions (
+        exam_id TEXT NOT NULL, revision TEXT NOT NULL, pack_json TEXT NOT NULL,
+        PRIMARY KEY (exam_id,revision))''')
     try:
         with conn:
             yield conn
@@ -65,28 +77,78 @@ def database():
 
 
 def public_pack(pack):
-    return {key: pack[key] for key in ('id', 'title', 'level', 'year', 'month', 'sections', 'questions')}
+    result = {key: pack[key] for key in ('id', 'title', 'level', 'year', 'month', 'sections', 'questions')}
+    material_keys = {'id', 'kind', 'section', 'fragments'}
+    result['materials'] = [{key: value for key, value in m.items() if key in material_keys}
+                           for m in pack.get('materials', []) if m.get('section') != 'listening'
+                           and m.get('kind') != 'listening_transcript']
+    return result
 
 
 def question_view(question):
-    return {key: value for key, value in question.items()
-            if key not in ('correct', 'explanation_pages', 'answer_key_page')}
+    allowed = {'id', 'section_id', 'label', 'short_label', 'group_title', 'instruction', 'option_count',
+               'assets', 'stem_fragments', 'options', 'material_ids', 'grading_status', 'review_notice'}
+    return {key: value for key, value in question.items() if key in allowed}
+
+
+def pin_pack(conn, pack):
+    text = json.dumps(pack, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    revision = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    conn.execute('INSERT OR IGNORE INTO exam_versions (exam_id,revision,pack_json) VALUES (?,?,?)',
+                 (pack['id'], revision, text))
+    return revision
+
+
+def attempt_pack(conn, row):
+    if row['pack_revision']:
+        snapshot = conn.execute('SELECT pack_json FROM exam_versions WHERE exam_id=? AND revision=?',
+                                (row['exam_id'], row['pack_revision'])).fetchone()
+        if snapshot is None:
+            raise HTTPException(409, '本次考试的试卷版本缺失，请恢复题库备份')
+        return json.loads(snapshot[0])
+    _, pack = load_pack(row['exam_id'])
+    revision = pin_pack(conn, pack)
+    conn.execute('UPDATE attempts SET pack_revision=? WHERE id=? AND pack_revision IS NULL', (revision, row['id']))
+    stored = conn.execute('SELECT pack_revision FROM attempts WHERE id=?', (row['id'],)).fetchone()
+    if stored['pack_revision'] != revision:
+        # A concurrent reader may have pinned the legacy row before this one.
+        pinned = conn.execute('SELECT * FROM attempts WHERE id=?', (row['id'],)).fetchone()
+        return attempt_pack(conn, pinned)
+    return pack
+
+
+def graded(question):
+    return (question.get('grading_status') != 'withheld' and type(question.get('correct')) is int
+            and 1 <= question['correct'] <= question['option_count'])
 
 
 def serialize_attempt(row, pack):
     result = dict(row)
+    # A legacy row is pinned by attempt_pack in this transaction, after it was
+    # fetched. Return the pinned revision on that first response as well.
+    if not result['pack_revision']:
+        text = json.dumps(pack, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+        result['pack_revision'] = hashlib.sha256(text.encode('utf-8')).hexdigest()
     result['answers'] = json.loads(row['answers'])
     result['marked'] = json.loads(row['marked'])
     questions = [q for q in pack['questions'] if q['section_id'] == row['section_id']]
     result['server_now'] = time.time()
     if row['status'] == 'submitted':
-        correct = sum(result['answers'].get(q['id']) == q['correct'] for q in questions)
+        scored = [q for q in questions if graded(q)]
+        correct = sum(result['answers'].get(q['id']) == q['correct'] for q in scored)
         answered = sum(q['id'] in result['answers'] for q in questions)
-        result['score'] = {'correct': correct, 'total': len(questions), 'answered': answered,
-                           'accuracy': round(100 * correct / len(questions), 1)}
-        result['review'] = [dict(q, selected=result['answers'].get(q['id']),
-                                is_correct=result['answers'].get(q['id']) == q['correct'])
-                            for q in questions]
+        result['score'] = {'correct': correct, 'total': len(scored), 'answered': answered,
+                           'accuracy': round(100 * correct / len(scored), 1) if scored else None}
+        if len(scored) != len(questions):
+            result['score'].update(question_count=len(questions), excluded=len(questions)-len(scored),
+                                   unanswered=len(questions)-answered)
+        material_map = {m['id']: m for m in pack.get('materials', [])}
+        result['review'] = [dict(q, selected=result['answers'].get(q['id']), is_graded=graded(q),
+                                is_correct=(result['answers'].get(q['id']) == q['correct']) if graded(q) else None,
+                                source_notes=q.get('source_notes', []) + [note for mid in q.get('material_ids', [])
+                                    for note in material_map.get(mid, {}).get('source_notes', [])],
+                                transcript_fragments=[f for mid in q.get('transcript_material_ids', [])
+                                    for f in material_map.get(mid, {}).get('fragments', [])]) for q in questions]
     return result
 
 
@@ -96,7 +158,7 @@ def get_attempt(conn, attempt_id, user_id):
         raise HTTPException(404, '考试记录不存在')
     # Deadlines are authoritative on the server, including while the browser was closed.
     if row['status'] == 'active' and row['deadline_at'] is not None and time.time() >= row['deadline_at']:
-        conn.execute("UPDATE attempts SET status='submitted', submitted_at=? WHERE id=?",
+        conn.execute("UPDATE attempts SET status='submitted', submitted_at=? WHERE id=? AND status='active'",
                      (row['deadline_at'], attempt_id))
         row = conn.execute('SELECT * FROM attempts WHERE id=?', (attempt_id,)).fetchone()
     return row
@@ -150,7 +212,7 @@ def create_router(current_user):
     def read_attempt(attempt_id: str, user=Depends(owner)):
         with database() as conn:
             row = get_attempt(conn, attempt_id, user['id'])
-            _, pack = load_pack(row['exam_id'])
+            pack = attempt_pack(conn, row)
             return serialize_attempt(row, pack)
 
     @router.put('/attempts/{attempt_id}')
@@ -158,7 +220,7 @@ def create_router(current_user):
         with database() as conn:
             conn.execute('BEGIN IMMEDIATE')
             row = get_attempt(conn, attempt_id, user['id'])
-            _, pack = load_pack(row['exam_id'])
+            pack = attempt_pack(conn, row)
             if row['status'] != 'active':
                 return serialize_attempt(row, pack)
             questions = {q['id']: q for q in pack['questions'] if q['section_id'] == row['section_id']}
@@ -187,12 +249,19 @@ def create_router(current_user):
             if row['status'] == 'active':
                 conn.execute("UPDATE attempts SET status='submitted', submitted_at=? WHERE id=?", (time.time(), attempt_id))
             row = get_attempt(conn, attempt_id, user['id'])
-            _, pack = load_pack(row['exam_id'])
+            pack = attempt_pack(conn, row)
             return serialize_attempt(row, pack)
 
     @router.get('/{exam_id}')
-    def exam(exam_id: str, user=Depends(owner)):
-        _, pack = load_pack(exam_id)
+    def exam(exam_id: str, attempt: str | None = None, user=Depends(owner)):
+        if attempt:
+            with database() as conn:
+                row = get_attempt(conn, attempt, user['id'])
+                if row['exam_id'] != exam_id:
+                    raise HTTPException(404, '考试记录不存在')
+                pack = attempt_pack(conn, row)
+        else:
+            _, pack = load_pack(exam_id)
         result = public_pack(pack)
         result['questions'] = [question_view(q) for q in pack['questions']]
         return result
@@ -207,7 +276,8 @@ def create_router(current_user):
                     WHERE b.user_id=a.user_id AND b.exam_id=a.exam_id AND b.section_id=a.section_id
                     ORDER BY b.started_at DESC,b.rowid DESC LIMIT 1)
                 ORDER BY a.started_at DESC,a.rowid DESC''', (user['id'], exam_id)).fetchall()
-            return {'attempts': [serialize_attempt(get_attempt(conn, item['id'], user['id']), pack) for item in ids]}
+            records = [get_attempt(conn, item['id'], user['id']) for item in ids]
+            return {'attempts': [serialize_attempt(row, attempt_pack(conn, row)) for row in records]}
 
     @router.post('/{exam_id}/attempts', status_code=201)
     def start(exam_id: str, body: StartIn, response: Response, user=Depends(owner)):
@@ -228,10 +298,11 @@ def create_router(current_user):
                 existing = get_attempt(conn, latest['id'], user['id'])
                 if existing['status'] == 'active':
                     response.status_code = 200
-                    return dict(serialize_attempt(existing, pack), resumed=True)
-            conn.execute('INSERT INTO attempts (id,user_id,exam_id,section_id,mode,status,started_at,deadline_at,cursor) '
-                         "VALUES (?,?,?,?,?,'active',?,?,?)",
-                         (attempt_id, user['id'], exam_id, body.section_id, body.mode, started, deadline, first))
+                    return dict(serialize_attempt(existing, attempt_pack(conn, existing)), resumed=True)
+            revision = pin_pack(conn, pack)
+            conn.execute('INSERT INTO attempts (id,user_id,exam_id,section_id,mode,status,started_at,deadline_at,cursor,pack_revision) '
+                         "VALUES (?,?,?,?,?,'active',?,?,?,?)",
+                         (attempt_id, user['id'], exam_id, body.section_id, body.mode, started, deadline, first, revision))
             return dict(serialize_attempt(get_attempt(conn, attempt_id, user['id']), pack), resumed=False)
 
     @router.get('/{exam_id}/assets/{kind}/{filename}')
@@ -250,9 +321,18 @@ def create_router(current_user):
         return FileResponse(path, media_type='image/webp', headers={'Cache-Control': 'private, no-store'})
 
     @router.get('/{exam_id}/audio')
-    def audio(exam_id: str, user=Depends(media_owner)):
-        folder, _ = load_pack(exam_id)
-        path = (folder / 'source' / 'listening.mp3').resolve()
+    def audio(exam_id: str, attempt: str | None = None, user=Depends(media_owner)):
+        folder, pack = load_pack(exam_id)
+        if attempt:
+            with database() as conn:
+                row = get_attempt(conn, attempt, user['id'])
+                if row['exam_id'] != exam_id:
+                    raise HTTPException(404, '考试记录不存在')
+                pack = attempt_pack(conn, row)
+        filename = pack.get('audio_file', 'listening.mp3')
+        if not re.fullmatch(r'(?:listening|audio-[a-f0-9]{64})\.mp3', filename):
+            raise HTTPException(404, '听力音频尚未导入')
+        path = (folder / 'source' / filename).resolve()
         if not path.is_relative_to(folder) or not path.is_file():
             raise HTTPException(404, '听力音频尚未导入')
         return FileResponse(path, media_type='audio/mpeg', headers={'Cache-Control': 'private, no-store'})

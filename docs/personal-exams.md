@@ -1,4 +1,32 @@
-# 个人试卷样版
+# 个人考试
+
+## v1.5.0：文字试卷与私人批量安装
+
+考试页按 N1/N2、年份、月份选择，记忆上次选择，并只请求当前试卷的历史记录。文字题、带下划线的题干、四个编号选项、共用阅读文章和表格直接显示；「原卷对照」保留原图。听力使用整条原录音，恢复播放位置；逐题时间点仍需另行核对。
+
+题目支持 `reference` 与 `withheld` 两种批改状态。待核对题可以作答，结果显示「暂不计分」，从正确率、计分题数和错题筛选中排除；全部待核对时正确率为空。参考答案来自用户提供资料，原始正确率不是 JLPT 官方量尺分。交卷前不返回正确答案、解析、资料备注或听力原文。
+
+每次考试固定题库版本。更新同一套试卷后，旧考试仍使用开始时的题目、答案与音频；默认继续最近一次未交卷记录。旧版无版本号的记录必须在替换旧 `exam.json` **之前**保存快照。安装器执行该迁移，并先使用 SQLite backup API 备份记录；旧媒体文件保留。
+
+`scripts/prepare-exam-library.py` 将来源可追溯的私有整理稿转换为 v2 题库、媒体生成计划和 SHA256 清单，不上传云端。Git 仓库仅提供通用程序，不包含整理稿或试卷内容。
+
+`scripts/install-exam-library.py` 为独立离线安装器，依赖 `pypdfium2==5.14.0`、`Pillow==12.3.0`。默认只校验；PDF、MP3、题库清单、页码和所有引用通过检查后，才可显式安装。读取权限、校验失败或所有者不符时中止。图片按源文件哈希和渲染参数缓存，重复执行复用已完成工作。`--data-dir` 指应用的 DATA_DIR，题库默认安装到其 `private-exams/` 子目录；设置 PRIVATE_EXAMS_DIR 时传 `--library-dir`。
+
+```bash
+# 原资料与应用同一台机器：先检查，再安装。
+python install-exam-library.py --bundle library --source-root /path/to/source --data-dir /path/to/app/data --owner YOUR_APP_USERNAME --dry-run
+python install-exam-library.py --bundle library --source-root /path/to/source --data-dir /path/to/app/data --owner YOUR_APP_USERNAME --install
+
+# 处理 VPS 与网站服务器不同时：先生成私人媒体目录，转移后再发布。
+python install-exam-library.py --bundle library --source-root /path/to/source --build-only --build-output /path/to/ready
+python install-exam-library.py --bundle library --ready-root /path/to/ready --data-dir /path/to/app/data --install
+```
+
+已有 `access.json` 时沿用所有者，可省略 `--owner`。首次安装需使用网站登录用户名。媒体生成结果包含 `ready-manifest.json`，不含访问配置或考试记录；发布前验证文件哈希。已有原卷图像试卷继续兼容。
+
+验证：12 项真实后端测试覆盖权限、续答、严格选项校验、交卷、排除计分、截止时间、并发开始及版本快照。安装器测试使用真实 PDF 渲染，验证备份迁移、重复安装、跨机器媒体发布、源哈希不符和路径越界。新浏览器测试在 390px/1280px 使用独立 HTTP API/媒体夹具，验证级别/年份选择、文字材料、待核对计分展示、保存失败恢复、旧图片题和固定听力控制栏；夹具测试不代表 OCR 全文准确率。
+
+## v1.4.0 原卷图像样版
 
 入口：底栏「探索 / 学习 / 复习 / 考试 / 我的」中的考试 Tab；我的页不再放考试入口。v1.4.0 发布程序代码；个人 PDF、音频、扫描图、答案、OCR 草稿与考试记录均保存在根目录 `data/`，该目录已被 `.gitignore` 和 `.dockerignore` 排除，不随 GitHub 源码或 Release 分发。
 

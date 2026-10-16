@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -53,6 +54,11 @@ class PrivateExamTests(unittest.TestCase):
         self.client.cookies.clear()
         with private_exams.database() as conn:
             conn.execute('DELETE FROM attempts')
+        self.pack_file = private_exams.root_dir() / 'fixture/exam.json'
+        self.original_pack = self.pack_file.read_text()
+
+    def tearDown(self):
+        self.pack_file.write_text(self.original_pack)
 
     def start(self, mode='practice', restart=True):
         response = self.client.post('/api/private-exams/fixture/attempts', headers=self.headers[0],
@@ -161,6 +167,131 @@ class PrivateExamTests(unittest.TestCase):
         self.assertEqual(fresh['status'], 'active')
         old = self.client.get('/api/private-exams/attempts/' + first['id'], headers=self.headers[0]).json()
         self.assertEqual(old['status'], 'submitted')
+
+    def test_unresolved_questions_never_count_as_correct_or_enter_denominator(self):
+        pack = json.loads(self.pack_file.read_text())
+        pack['questions'][1].update(correct=None, grading_status='withheld',
+            explanation_fragments=[{'text': 'private explanation answer: 3'}],
+            answer_sources=[{'choice': 3}], transcript_material_ids=['dialogue'])
+        pack['materials'] = [{'id': 'dialogue', 'section': 'listening', 'kind': 'listening_transcript',
+                              'fragments': [{'text': 'private transcript'}]}]
+        self.pack_file.write_text(json.dumps(pack))
+        public = self.client.get('/api/private-exams/fixture', headers=self.headers[0]).json()
+        self.assertNotIn('private explanation', json.dumps(public))
+        self.assertNotIn('private transcript', json.dumps(public))
+        self.assertNotIn('answer_sources', public['questions'][1])
+        attempt = self.start()
+        url = '/api/private-exams/attempts/' + attempt['id']
+        self.client.put(url, headers=self.headers[0], json={'answers': {'q1': 2}})
+        result = self.client.post(url + '/submit', headers=self.headers[0]).json()
+        self.assertEqual(result['score']['correct'], 1)
+        self.assertEqual(result['score']['total'], 1)
+        self.assertEqual(result['score']['excluded'], 1)
+        self.assertEqual(result['score']['accuracy'], 100.0)
+        self.assertIsNone(result['review'][1]['is_correct'])
+        self.assertFalse(result['review'][1]['is_graded'])
+        self.assertEqual(result['review'][1]['transcript_fragments'][0]['text'], 'private transcript')
+        pack['questions'][0].update(correct=None, grading_status='withheld')
+        self.pack_file.write_text(json.dumps(pack))
+        empty = self.start()
+        result = self.client.post('/api/private-exams/attempts/' + empty['id'] + '/submit', headers=self.headers[0]).json()
+        self.assertEqual(result['score']['total'], 0)
+        self.assertEqual(result['score']['correct'], 0)
+        self.assertIsNone(result['score']['accuracy'])
+
+    def test_exam_revision_locks_questions_answers_and_old_results(self):
+        first = self.start()
+        url = '/api/private-exams/attempts/' + first['id']
+        self.client.put(url, headers=self.headers[0], json={'answers': {'q1': 2}, 'cursor': 'q2'})
+        pack = json.loads(self.pack_file.read_text())
+        pack['title'] = 'Revised exam'
+        pack['questions'][0]['correct'] = 4
+        pack['questions'][1]['id'] = 'new-question'
+        self.pack_file.write_text(json.dumps(pack))
+        resumed = self.start(restart=False)
+        self.assertEqual(resumed['id'], first['id'])
+        locked = self.client.get('/api/private-exams/fixture?attempt=' + first['id'], headers=self.headers[0]).json()
+        self.assertEqual(locked['title'], 'Fixture')
+        self.assertEqual(locked['questions'][1]['id'], 'q2')
+        self.assertEqual(self.client.put(url, headers=self.headers[0], json={'answers': {'q2': 3}}).status_code, 200)
+        result = self.client.post(url + '/submit', headers=self.headers[0]).json()
+        self.assertEqual(result['score']['correct'], 2)
+        new = self.start()
+        self.assertNotEqual(new['pack_revision'], first['pack_revision'])
+        self.assertEqual(self.client.get(url, headers=self.headers[0]).json()['score']['correct'], 2)
+        self.assertEqual(self.client.get('/api/private-exams/fixture?attempt=' + new['id'], headers=self.headers[0]).json()['title'], 'Revised exam')
+
+    def test_simultaneous_default_starts_resume_a_single_attempt(self):
+        def start_once(_):
+            return self.start('timed', restart=False)
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            attempts = list(executor.map(start_once, range(8)))
+        self.assertEqual(len({attempt['id'] for attempt in attempts}), 1)
+        self.assertEqual(sum(not attempt['resumed'] for attempt in attempts), 1)
+        self.assertEqual(len({attempt['deadline_at'] for attempt in attempts}), 1)
+        with private_exams.database() as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM attempts').fetchone()[0], 1)
+
+    def test_revision_pins_audio_and_missing_snapshots_fail_closed(self):
+        folder = self.pack_file.parent
+        old_name, new_name = 'audio-' + '1' * 64 + '.mp3', 'audio-' + '2' * 64 + '.mp3'
+        (folder / 'source' / old_name).write_bytes(b'old-audio')
+        (folder / 'source' / new_name).write_bytes(b'new-audio')
+        pack = json.loads(self.pack_file.read_text())
+        pack['audio_file'] = old_name
+        self.pack_file.write_text(json.dumps(pack))
+        first = self.start()
+        pack['audio_file'] = new_name
+        self.pack_file.write_text(json.dumps(pack))
+        media = '/api/private-exams/fixture/audio'
+        self.assertEqual(self.client.get(media + '?attempt=' + first['id'], headers=self.headers[0]).content, b'old-audio')
+        self.assertEqual(self.client.get(media, headers=self.headers[0]).content, b'new-audio')
+        with private_exams.database() as conn:
+            conn.execute('DELETE FROM exam_versions WHERE revision=?', (first['pack_revision'],))
+        self.assertEqual(self.client.get('/api/private-exams/attempts/' + first['id'], headers=self.headers[0]).status_code, 409)
+        self.assertEqual(self.client.get(media + '?attempt=' + first['id'], headers=self.headers[0]).status_code, 409)
+
+    def test_legacy_attempt_is_pinned_on_first_read_and_keeps_its_grade(self):
+        first = self.start()
+        url = '/api/private-exams/attempts/' + first['id']
+        self.client.put(url, headers=self.headers[0], json={'answers': {'q1': 2}})
+        self.client.post(url + '/submit', headers=self.headers[0])
+        with private_exams.database() as conn:
+            conn.execute('UPDATE attempts SET pack_revision=NULL WHERE id=?', (first['id'],))
+        restored = self.client.get(url, headers=self.headers[0]).json()
+        self.assertEqual(restored['pack_revision'], first['pack_revision'])
+        with private_exams.database() as conn:
+            self.assertEqual(conn.execute('SELECT pack_revision FROM attempts WHERE id=?', (first['id'],)).fetchone()[0], first['pack_revision'])
+        pack = json.loads(self.pack_file.read_text())
+        pack['questions'][0]['correct'] = 4
+        self.pack_file.write_text(json.dumps(pack))
+        self.assertEqual(self.client.get(url, headers=self.headers[0]).json()['score']['correct'], 1)
+
+    def test_public_question_uses_allowlist_and_attempt_ids_require_the_owner(self):
+        pack = json.loads(self.pack_file.read_text())
+        pack['questions'][0].update(answer_text='secret answer', rationale='secret rationale',
+            explanation_fragments=[{'text': 'secret explanation'}],
+            answer_sources=[{'choice': 2}], transcript_fragments=[{'text': 'secret transcript'}],
+            diagnostic={'correct': 2})
+        pack['materials'] = [{'id': 'reading', 'kind': 'passage', 'section': 'language',
+                              'fragments': [{'text': 'visible passage'}],
+                              'source_notes': [{'message': 'secret editorial note'}], 'correct': 2}]
+        pack['questions'][0]['material_ids'] = ['reading']
+        self.pack_file.write_text(json.dumps(pack))
+        public = self.client.get('/api/private-exams/fixture', headers=self.headers[0]).json()
+        self.assertNotIn('secret', json.dumps(public))
+        self.assertNotIn('diagnostic', public['questions'][0])
+        self.assertEqual(public['materials'][0]['fragments'][0]['text'], 'visible passage')
+        first = self.start()
+        submitted = self.client.post('/api/private-exams/attempts/' + first['id'] + '/submit',
+                                     headers=self.headers[0], json={}).json()
+        self.assertEqual(submitted['review'][0]['source_notes'][0]['message'], 'secret editorial note')
+        with private_exams.database() as conn:
+            conn.execute('UPDATE attempts SET user_id=999 WHERE id=?', (first['id'],))
+        for path in ('/api/private-exams/attempts/' + first['id'],
+                     '/api/private-exams/fixture?attempt=' + first['id'],
+                     '/api/private-exams/fixture/audio?attempt=' + first['id']):
+            self.assertEqual(self.client.get(path, headers=self.headers[0]).status_code, 404)
 
 
 if __name__ == '__main__':

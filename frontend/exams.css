@@ -1,6 +1,23 @@
 .exam-intro {
   padding:22px 0 18px}
 
+.exam-level-tabs,.exam-catalog-filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.exam-level-tabs .btn{width:auto;min-width:100px;flex:1}
+.exam-catalog-filters label{display:grid;gap:6px;min-width:130px;font-size:13px}
+.exam-catalog-filters select{font:inherit;padding:10px;border:1px solid var(--glass-border,rgba(128,128,128,.3));border-radius:12px;background:var(--paper,#fff);color:var(--ink,#222)}
+.exam-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.95;margin:14px 0;font-size:18px}
+.exam-text u{text-underline-offset:4px;text-decoration-thickness:1.5px}
+.exam-passage{padding:18px;border:1px solid rgba(128,128,128,.25);border-radius:14px;margin-bottom:22px}
+.exam-passage h3{font-size:14px;color:var(--ink-soft)}
+.exam-text-option{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;border:1px solid rgba(128,128,128,.2);border-radius:12px;padding:2px 14px;margin:10px 0}
+.exam-option-index{align-self:start;padding-top:18px;color:var(--ink-soft);font-size:15px}
+.exam-source-note{padding:10px 12px;border-left:3px solid #b57534;background:rgba(181,117,52,.08);line-height:1.8;overflow-wrap:anywhere}
+.exam-text-table{display:block;overflow:auto;border-collapse:collapse;max-width:100%}
+.exam-text-table td{border:1px solid rgba(128,128,128,.35);padding:8px;min-width:80px;white-space:pre-wrap}
+.exam-review-notice{border-radius:12px;padding:12px;background:rgba(181,117,52,.12);color:var(--ink);font-size:14px}
+.exam-original{margin:20px 0}.exam-original>summary{cursor:pointer;font-weight:700;padding:8px 0}
+.exam-verdict.pending,.exam-grid .review-pending{background:rgba(181,117,52,.12);color:var(--ink);border-color:#b57534}
+
 .exam-intro h2 {
   font-size:clamp(22px,4vw,30px);
   margin:9px 0}
