@@ -1195,13 +1195,19 @@ _frontend_dir = _find_frontend_dir()
 if _frontend_dir is not None:
     from fastapi.responses import FileResponse
 
+    @app.get("/api/app-shell/worker", include_in_schema=False)
     @app.get("/sw.js", include_in_schema=False)
     def _sw_no_cache():
         return FileResponse(
             str(_frontend_dir / "sw.js"),
             media_type="application/javascript",
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Service-Worker-Allowed": "/"},
         )
+
+    @app.get("/app-update", include_in_schema=False)
+    def _fresh_shell():
+        return FileResponse(str(_frontend_dir / "index.html"), media_type="text/html",
+                            headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 if _frontend_dir is not None:
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")

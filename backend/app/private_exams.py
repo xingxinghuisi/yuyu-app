@@ -82,7 +82,14 @@ def public_pack(pack):
     result['materials'] = [{key: value for key, value in m.items() if key in material_keys}
                            for m in pack.get('materials', []) if m.get('section') != 'listening'
                            and m.get('kind') != 'listening_transcript']
+    result['content_format'] = 'text' if has_text_content(pack) else 'scan'
     return result
+
+
+def has_text_content(pack):
+    return any(q.get('section_id') == 'language' and
+               any(f.get('text', '').strip() for f in q.get('stem_fragments', []))
+               for q in pack.get('questions', []))
 
 
 def question_view(question):
@@ -263,6 +270,9 @@ def create_router(current_user):
         else:
             _, pack = load_pack(exam_id)
         result = public_pack(pack)
+        if attempt:
+            _, current = load_pack(exam_id)
+            result['text_update_available'] = not has_text_content(pack) and has_text_content(current)
         result['questions'] = [question_view(q) for q in pack['questions']]
         return result
 

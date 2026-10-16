@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="map.css">
 <link rel="stylesheet" href="anime.css">
 <link rel="stylesheet" href="map-sheet.css">
-<link rel="stylesheet" href="exams.css">
+<link rel="stylesheet" href="exams.css?v=1.5.1">
 </head>
 <body>
 
@@ -76,25 +76,24 @@
 <script src="map-model.js"></script>
 <script src="map.js"></script>
 <script src="map-art.js"></script>
-<script src="exams.js"></script>
-<script src="app.js"></script>
+<script src="exams.js?v=1.5.1"></script>
+<script src="app.js?v=1.5.1"></script>
 <script>
 // 注册 Service Worker（PWA 离线能力）；每次启动主动检查更新，避免旧前端滞留
-// 热更新：新 SW 接管控制器后自动刷新一次（每会话一次），用户无需手动清缓存
+// 每次新 worker 接管后刷新一次；同一标签页也能接收第二次发版。
 (function () {
   if (!('serviceWorker' in navigator)) return;
   var hadController = !!navigator.serviceWorker.controller; // 首次安装时为 null，不触发刷新
   var reloaded = false;
-  try { reloaded = sessionStorage.getItem('yuyu_sw_reloaded') === '1'; } catch (e) {}
   navigator.serviceWorker.addEventListener('controllerchange', function () {
-    if (!hadController || reloaded) return;
+    if (!hadController) { hadController = true; return; }
+    if (reloaded) return;
     reloaded = true;
-    try { sessionStorage.setItem('yuyu_sw_reloaded', '1'); } catch (e) {}
     try { if (typeof toast === 'function') toast('新版本已就绪，正在更新…'); } catch (e) {}
     setTimeout(function () { location.reload(); }, 800);
   });
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js').then(function (reg) {
+    navigator.serviceWorker.register('/api/app-shell/worker', { scope: '/' }).then(function (reg) {
       if (!reg || !reg.update) return;
       reg.update();
       // 标签页一直开着时也要能热更新：每 60 秒查一次 + 切回前台时查

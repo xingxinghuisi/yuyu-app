@@ -1,6 +1,28 @@
 .exam-intro {
   padding:22px 0 18px}
 
+.exam-breadcrumb{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 24px;font-size:14px}
+.exam-breadcrumb a,.exam-last-selection{color:var(--ink);text-underline-offset:4px}
+.exam-breadcrumb>span{color:var(--ink-soft)}
+.exam-step-title{font-size:21px;margin:0 0 18px}
+.exam-select-grid{display:grid;gap:16px;margin-bottom:22px}
+.exam-level-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+.exam-year-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}
+.exam-month-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-width:650px}
+.exam-select-card{position:relative;display:flex;flex-direction:column;gap:12px;padding:26px 22px;text-decoration:none;color:var(--ink);min-width:0;border:1px solid var(--glass-border);transition:transform .15s,border-color .15s}
+.exam-select-card:hover{transform:translateY(-2px);border-color:var(--vermilion)}
+.exam-select-card:focus-visible{outline:3px solid var(--vermilion);outline-offset:3px}
+.exam-select-card>b{font-size:25px;line-height:1.4}
+.exam-select-card>span{font-size:13px;color:var(--ink-soft)}
+.exam-select-card .exam-select-arrow{position:absolute;right:14px;top:22px;font-size:23px}
+.exam-last-selection{display:inline-block;margin:0 0 18px;font-size:14px}
+.exam-version-notice{padding:16px 20px;margin:12px 0;line-height:1.8}
+.exam-version-notice p{margin:0 0 10px;font-size:14px}
+.exam-text-question{padding:4px 0}
+body:has(.exam-select-grid) .app,body:has(.exam-pack) .app{max-width:1000px}
+body:has(.exam-select-grid) .topbar-inner,body:has(.exam-pack) .topbar-inner{max-width:1000px}
+@media(max-width:760px){.exam-level-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.exam-select-card{padding:22px 18px}.exam-month-grid{grid-template-columns:minmax(0,1fr)}}
+
 .exam-level-tabs,.exam-catalog-filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .exam-level-tabs .btn{width:auto;min-width:100px;flex:1}
 .exam-catalog-filters label{display:grid;gap:6px;min-width:130px;font-size:13px}

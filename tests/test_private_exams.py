@@ -293,6 +293,34 @@ class PrivateExamTests(unittest.TestCase):
                      '/api/private-exams/fixture/audio?attempt=' + first['id']):
             self.assertEqual(self.client.get(path, headers=self.headers[0]).status_code, 404)
 
+    def test_old_scan_progress_exposes_text_update_without_changing_answers_or_revision(self):
+        first = self.start()
+        url = '/api/private-exams/attempts/' + first['id']
+        self.client.put(url, headers=self.headers[0], json={'answers': {'q1': 2}, 'cursor': 'q2'})
+        current = json.loads(self.pack_file.read_text())
+        current['questions'][0]['stem_fragments'] = [{'text': 'Current structured question'}]
+        self.pack_file.write_text(json.dumps(current))
+        public = self.client.get('/api/private-exams/fixture?attempt=' + first['id'], headers=self.headers[0]).json()
+        self.assertEqual(public['content_format'], 'scan')
+        self.assertTrue(public['text_update_available'])
+        self.assertNotIn('Current structured question', json.dumps(public))
+        old = self.client.get(url, headers=self.headers[0]).json()
+        self.assertEqual(old['answers'], {'q1': 2})
+        self.assertEqual(old['cursor'], 'q2')
+        self.assertEqual(old['pack_revision'], first['pack_revision'])
+        latest = self.client.get('/api/private-exams/fixture', headers=self.headers[0]).json()
+        self.assertEqual(latest['content_format'], 'text')
+
+    def test_public_worker_and_fresh_shell_do_not_require_a_login(self):
+        worker = self.client.get('/api/app-shell/worker')
+        self.assertEqual(worker.status_code, 200)
+        self.assertIn('no-store', worker.headers['cache-control'])
+        self.assertEqual(worker.headers['service-worker-allowed'], '/')
+        self.assertIn('yuyu-v33-exam-catalog', worker.text)
+        shell = self.client.get('/app-update?v=1.5.1')
+        self.assertEqual(shell.status_code, 200)
+        self.assertIn('exams.js?v=1.5.1', shell.text)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,12 +1,12 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v32-private-text-exams';
+var CACHE_NAME = 'yuyu-v33-exam-catalog';
 var ASSETS = [
   './',
   './index.html',
   './styles.css',
-  './app.js',
-  './exams.js',
-  './exams.css',
+  './app.js?v=1.5.1',
+  './exams.js?v=1.5.1',
+  './exams.css?v=1.5.1',
   './map-model.js',
   './map.js',
   './map.css',
@@ -23,7 +23,7 @@ var ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './manifest.json'
-];
+].map(function (path) { return path.replace(/^\.\//, '/'); });
 
 self.addEventListener('install', function (event) {
   event.waitUntil(
@@ -55,7 +55,7 @@ self.addEventListener('fetch', function (event) {
     var url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
     // The loopback preview entry carries a session bootstrap and must always use the network.
-    if (url.pathname === '/preview-exam') return;
+    if (url.pathname === '/preview-exam' || url.pathname === '/app-update') return;
     if (url.pathname === '/api' || url.pathname.indexOf('/api/') === 0) return;
   } catch (e) { return; }
 
@@ -72,7 +72,7 @@ self.addEventListener('fetch', function (event) {
         return res;
       }).catch(function () {
         // 离线且无缓存时，若是页面导航则返回 index.html
-        if (req.mode === 'navigate') return caches.match('./index.html');
+        if (req.mode === 'navigate') return caches.match('/index.html');
         throw new Error('offline');
       });
     })

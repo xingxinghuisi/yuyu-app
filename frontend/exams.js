@@ -38,13 +38,37 @@
     return '<div class="exam-text" lang="ja">' + text + '</div>' + table;
   }
   function fragmentsHtml(fragments) { return (fragments || []).map(fragmentHtml).join(''); }
+  function optionFragments(option) {
+    return (option.fragments || []).map(function (fragment, index) {
+      var prefix = index === 0 && (fragment.text || '').match(/^\s*([1-4１-４])[.．、)]?[\s　]+/);
+      if (!prefix || Number(prefix[1].replace(/[１-４]/g, function (c) { return String(c.charCodeAt(0) - 65248); })) !== option.index) return fragmentHtml(fragment);
+      var cut = Array.from(prefix[0]).length;
+      return fragmentHtml(Object.assign({}, fragment, { text: Array.from(fragment.text).slice(cut).join(''),
+        annotations: (fragment.annotations || []).filter(function (a) { return a.start >= cut; }).map(function (a) {
+          return Object.assign({}, a, { start: a.start - cut, end: a.end - cut });
+        }) }));
+    }).join('');
+  }
+  function catalogUrl(level, year, month) {
+    var params = new URLSearchParams();
+    if (level) params.set('level', level);
+    if (year) params.set('year', year);
+    if (month) params.set('month', month);
+    return '#/exams' + (params.toString() ? '?' + params.toString() : '');
+  }
+  function originalPaper(pack, q, attempt, zoom) {
+    if (!(q.assets || []).length) return '';
+    return '<details class="exam-original"><summary>原卷对照</summary>' + (zoom == null ? '' : zoomTools(zoom)) +
+      '<div class="exam-scan-scroll"><div' + (zoom == null ? '' : ' id="exam-scans"') + '>' + images(pack.id, q.assets, attempt) +
+      '</div></div><p class="exam-image-hint muted">原卷仅供对照；点按图片可全屏查看。</p></details>';
+  }
   function textQuestion(pack, q) {
     if (!q.stem_fragments && !q.options) return '';
     var materials = (pack.materials || []).filter(function (m) { return (q.material_ids || []).indexOf(m.id) >= 0; });
-    return materials.map(function (m) { return '<section class="exam-passage"><h3>共用阅读材料</h3>' + fragmentsHtml(m.fragments) + '</section>'; }).join('') +
+    return '<div class="exam-text-question" aria-label="题目正文">' + materials.map(function (m) { return '<section class="exam-passage"><h3>共用阅读材料</h3>' + fragmentsHtml(m.fragments) + '</section>'; }).join('') +
       fragmentsHtml(q.stem_fragments) + (q.options || []).map(function (o) {
-        return '<div class="exam-text-option"><b class="exam-option-index">' + esc(o.index) + '</b><div>' + fragmentsHtml(o.fragments) + '</div></div>';
-      }).join('');
+        return '<div class="exam-text-option"><b class="exam-option-index">' + esc(o.index) + '</b><div>' + optionFragments(o) + '</div></div>';
+      }).join('') + '</div>';
   }
   function sourceNotes(pack, q) {
     var materials = (pack.materials || []).filter(function (m) { return (q.material_ids || []).indexOf(m.id) >= 0; });
@@ -71,31 +95,50 @@
     try {
       await session();
       var data = await api('/private-exams');
-      var key = 'yuyu_exam_selection:' + (localStorage.getItem('yuyu_username') || ''), selection = {};
-      try { selection = JSON.parse(localStorage.getItem(key) || '{}'); } catch (ignore) {}
-      if (!selection || typeof selection !== 'object' || Array.isArray(selection)) selection = {};
-      var levels = Array.from(new Set(data.exams.map(function (p) { return p.level; }))).sort();
-      if (levels.indexOf(selection.level) < 0) selection.level = levels[0];
+      var key = 'yuyu_exam_selection:' + (localStorage.getItem('yuyu_username') || ''), lastSelection = {};
+      try { lastSelection = JSON.parse(localStorage.getItem(key) || '{}'); } catch (ignore) {}
+      if (!lastSelection || typeof lastSelection !== 'object') lastSelection = {};
+      var levels = ['N5', 'N4', 'N3', 'N2', 'N1'];
+      var selection = { level: query('level'), year: Number(query('year')), month: Number(query('month')) };
+      if (levels.indexOf(selection.level) < 0) selection.level = null;
       var years = Array.from(new Set(data.exams.filter(function (p) { return p.level === selection.level; }).map(function (p) { return p.year; }))).sort(function (a, b) { return b - a; });
-      if (years.indexOf(selection.year) < 0) selection.year = years[0];
+      if (years.indexOf(selection.year) < 0) selection.year = null;
       var periods = data.exams.filter(function (p) { return p.level === selection.level && p.year === selection.year; }).sort(function (a, b) { return b.month - a.month; });
-      if (!periods.some(function (p) { return p.month === selection.month; })) selection.month = periods.length ? periods[0].month : null;
+      if (!periods.some(function (p) { return p.month === selection.month; })) selection.month = null;
       var selectedPacks = periods.filter(function (p) { return p.month === selection.month; });
       var histories = await Promise.all(selectedPacks.map(function (pack) { return api('/private-exams/' + pack.id + '/attempts'); }));
       if (ticket !== stamp || currentRoute() !== 'exams') return;
+      var breadcrumbs = '<nav class="exam-breadcrumb" aria-label="考试分类"><a href="#/exams">级别</a>' +
+        (selection.level ? '<span>›</span><a href="' + catalogUrl(selection.level) + '">' + esc(selection.level) + '</a>' : '') +
+        (selection.year ? '<span>›</span><a href="' + catalogUrl(selection.level, selection.year) + '">' + selection.year + ' 年</a>' : '') +
+        (selection.month ? '<span>›</span><span aria-current="page">' + selection.month + ' 月</span>' : '') + '</nav>';
+      var picker = '';
+      if (!selection.level) {
+        picker = '<h2 class="exam-step-title">选择级别</h2><div class="exam-select-grid exam-level-grid">' + levels.map(function (level) {
+          var count = data.exams.filter(function (p) { return p.level === level; }).length;
+          return '<a class="glass exam-select-card" data-level="' + level + '" href="' + catalogUrl(level) + '"><b>' + level +
+            '</b><span>' + (count ? count + ' 套试卷' : '暂未导入') + '</span><span class="exam-select-arrow" aria-hidden="true">›</span></a>';
+        }).join('') + '</div>';
+        var previous = data.exams.find(function (p) { return p.level === lastSelection.level && p.year === lastSelection.year && p.month === lastSelection.month; });
+        if (previous) picker += '<a class="exam-last-selection" href="' + catalogUrl(previous.level, previous.year, previous.month) + '">上次选择：' + esc(previous.title) + ' ›</a>';
+      } else if (!selection.year) {
+        picker = '<h2 class="exam-step-title">' + esc(selection.level) + ' · 选择年份</h2>' + (years.length ? '<div class="exam-select-grid exam-year-grid">' + years.map(function (year) {
+          var count = data.exams.filter(function (p) { return p.level === selection.level && p.year === year; }).length;
+          return '<a class="glass exam-select-card" data-year="' + year + '" href="' + catalogUrl(selection.level, year) + '"><b>' + year +
+            ' 年</b><span>' + count + ' 个考期</span><span class="exam-select-arrow" aria-hidden="true">›</span></a>';
+        }).join('') + '</div>' : '<div class="glass exam-empty">' + esc(selection.level) + ' 暂未导入试卷。当前可使用 N1、N2 资料。</div>');
+      } else if (!selection.month) {
+        picker = '<h2 class="exam-step-title">' + esc(selection.level) + ' · ' + selection.year + ' 年 · 选择月份</h2><div class="exam-select-grid exam-month-grid">' + periods.map(function (p) {
+          return '<a class="glass exam-select-card" data-month="' + p.month + '" href="' + catalogUrl(p.level, p.year, p.month) + '"><b>' + p.month +
+            ' 月</b><span>查看试卷与最近进度</span><span class="exam-select-arrow" aria-hidden="true">›</span></a>';
+        }).join('') + '</div>';
+      }
       app.innerHTML = examHeading() +
         '<div class="exam-intro"><span class="exam-eyebrow">JLPT · 个人题库</span>' +
-        '<h2>选一套试卷，开始练习。</h2><p class="muted">原卷作答 · 保存进度 · 考后解析</p></div>' +
-        (data.exams.length ? '<div class="exam-level-tabs" role="group" aria-label="选择级别">' + levels.map(function (level) {
-          return '<button class="btn ' + (level === selection.level ? 'btn-primary' : 'btn-ghost') + '" data-level="' + esc(level) + '" aria-pressed="' + (level === selection.level) + '">' + esc(level) + '</button>';
-        }).join('') + '</div><div class="exam-catalog-filters"><label>年份<select id="exam-year">' + years.map(function (year) {
-          return '<option value="' + year + '"' + (year === selection.year ? ' selected' : '') + '>' + year + ' 年</option>';
-        }).join('') + '</select></label><label>考期<select id="exam-period">' + periods.map(function (p) {
-          return '<option value="' + p.month + '"' + (p.month === selection.month ? ' selected' : '') + '>' + p.month + ' 月</option>';
-        }).join('') + '</select></label></div>' + selectedPacks.map(function (pack, packIndex) {
+        '<h2>选择一套，专心练习。</h2><p class="muted">级别 → 年份 → 月份 · 文字作答 · 原卷对照</p></div>' + breadcrumbs + picker + selectedPacks.map(function (pack, packIndex) {
           var attempts = histories[packIndex].attempts;
           return '<section class="glass exam-pack"><div class="exam-pack-head"><span class="exam-level">' + esc(pack.level) +
-            '</span><div><h3>' + esc(pack.title) + '</h3><p class="muted">个人上传资料 · 原卷版面</p></div></div>' +
+            '</span><div><h3>' + esc(pack.title) + '</h3><p class="muted">文字题目 · 原卷可展开对照</p></div></div>' +
             pack.sections.map(function (s) {
               var latest = attempts.find(function (a) { return a.section_id === s.id; });
               var active = latest && latest.status === 'active';
@@ -115,15 +158,8 @@
                 '"><span><b>' + esc(text) + '</b><small class="muted">' + new Date(a.started_at * 1000).toLocaleString('zh-CN') +
                 '</small></span><span>' + esc(detail) + ' ›</span></a>';
             }).join('') : '<p class="muted">尚无考试记录</p>') + '</div></section>';
-        }).join('') : '<div class="exam-empty glass">还没有导入个人试卷。</div>');
-      function select(value) {
-        Object.assign(selection, value);
-        try { localStorage.setItem(key, JSON.stringify(selection)); } catch (ignore) {}
-        catalog();
-      }
-      app.querySelectorAll('[data-level]').forEach(function (button) { button.onclick = function () { select({level:button.dataset.level}); }; });
-      if (document.getElementById('exam-year')) document.getElementById('exam-year').onchange = function (e) { select({year:Number(e.target.value)}); };
-      if (document.getElementById('exam-period')) document.getElementById('exam-period').onchange = function (e) { select({month:Number(e.target.value)}); };
+        }).join('');
+      if (selectedPacks.length) { try { localStorage.setItem(key, JSON.stringify(selection)); } catch (ignore) {} }
       app.querySelectorAll('[data-resume]').forEach(function (button) {
         button.onclick = function () { location.hash = '#/exams/run?attempt=' + button.dataset.resume; };
       });
@@ -215,17 +251,18 @@
     var index = state.questions.findIndex(function (q) { return q.id === state.cursor; });
     if (index < 0) { index = 0; state.cursor = state.questions[0].id; }
     var q = state.questions[index];
+    var hasText = (q.stem_fragments || []).some(function (f) { return (f.text || '').trim(); }) || (q.options || []).length;
     var options = Array.from({ length: q.option_count }, function (_, i) { return i + 1; });
     var pane = document.getElementById('exam-question');
     pane.innerHTML = '<div class="exam-question-head"><div><span class="exam-eyebrow">' + esc(q.group_title) +
       '</span><h2>' + esc(q.label) + '</h2></div><button id="exam-mark" class="btn btn-ghost btn-sm" aria-pressed="' +
       !!state.marked[q.id] + '">' + (state.marked[q.id] ? '★ 已标记' : '☆ 稍后检查') + '</button></div>' +
       (q.instruction ? '<p class="exam-instruction" lang="ja">' + esc(q.instruction) + '</p>' : '') +
-      (q.grading_status === 'withheld' ? '<p class="exam-review-notice">资料待核对，本题可以作答，暂不计分。' + esc(q.review_notice || '') + '</p>' : '') +
-      textQuestion(state.pack, q) + (q.assets.length ? (q.stem_fragments ? '<details class="exam-original"><summary>原卷对照</summary>' : '') + zoomTools(state.zoom) +
-        '<div class="exam-scan-scroll"><div id="exam-scans">' + images(state.pack.id, q.assets, state.attempt.id) + '</div></div><p class="exam-image-hint muted">点按原图可全屏放大查看</p>' :
-        (q.stem_fragments && q.stem_fragments.length ? '' : '<div class="exam-listen-prompt">请听录音，在下方选择答案。<p class="muted">这一题型的题干与选项在录音中播放。</p></div>')) +
-      (q.assets.length && q.stem_fragments ? '</details>' : '') +
+      (q.grading_status === 'withheld' ? '<p class="exam-review-notice">' + esc(q.review_notice || '资料有疑点，本题可以作答，暂不计分。') + '</p>' : '') +
+      textQuestion(state.pack, q) + (!hasText ? state.attempt.section_id === 'listening' ?
+        '<div class="exam-listen-prompt">请听录音，在下方选择答案。<p class="muted">题干与选项在录音中播放；有图示时可展开原卷对照。</p></div>' :
+        '<p class="exam-review-notice">当前题目尚无文字内容，可展开原卷对照。旧版考试记录会保留开始时的题目版本。</p>' : '') +
+      originalPaper(state.pack, q, state.attempt.id, state.zoom) +
       '<div class="exam-answer-tools"><fieldset class="exam-choices"><legend>' +
       (state.attempt.section_id === 'listening' ? esc(q.label) + ' · 选择答案' : '选择答案') + '</legend>' + options.map(function (option) {
         return '<button type="button" class="exam-choice' + (state.answers[q.id] === option ? ' selected' : '') +
@@ -307,6 +344,8 @@
         '<div><b>' + esc(pack.title) + '</b><small>' + esc(sectionName(pack, attempt.section_id)) + '</small></div>' +
         '<span id="exam-clock" class="exam-clock"></span></div><div class="exam-status"><span id="exam-progress"></span>' +
         '<span id="exam-save-status" role="status">已恢复进度</span><button id="exam-retry-save" class="btn btn-ghost btn-sm" hidden>重试保存</button></div>' +
+        (pack.text_update_available ? '<div class="exam-version-notice glass"><p>这次进度开始于旧版原图试卷。文字版已可用，原记录和已答内容会保留。</p>' +
+          '<button id="exam-open-text" class="btn btn-primary btn-sm">另开文字版考试</button></div>' : '') +
         (attempt.section_id === 'listening' ? audioHtml(pack, attempt.audio_position, id) : '') +
         '<div class="exam-workspace"><section id="exam-question" class="glass exam-question"></section>' +
         '<aside class="glass exam-sheet"><h3>答题卡</h3><p class="muted">实心为已答，★ 为待检查</p><div class="exam-grid">' +
@@ -329,7 +368,17 @@
       });
       document.getElementById('exam-retry-save').onclick = function () { flush(state).catch(function () {}); };
       document.getElementById('exam-exit').onclick = async function () {
-        try { await flush(state); location.hash = '#/exams'; } catch (error) { toast('保存尚未成功，请重试后退出'); }
+        try { await flush(state); location.hash = catalogUrl(pack.level, pack.year, pack.month); } catch (error) { toast('保存尚未成功，请重试后退出'); }
+      };
+      var textStart = document.getElementById('exam-open-text');
+      if (textStart) textStart.onclick = async function () {
+        if (!await confirmModal('另开文字版考试', '当前考试的记录和已答内容会保留。新考试从第1题开始，计时模式会重新计时。', '开始文字版')) return;
+        textStart.disabled = true;
+        try {
+          await flush(state);
+          var next = await api('/private-exams/' + pack.id + '/attempts', 'POST', { section_id: attempt.section_id, mode: attempt.mode, restart: true });
+          location.hash = '#/exams/run?attempt=' + next.id;
+        } catch (error) { toast(error.message); textStart.disabled = false; }
       };
       var submitting = false;
       async function submit(automatic) {
@@ -376,7 +425,7 @@
       var pack = await api('/private-exams/' + attempt.exam_id + '?attempt=' + encodeURIComponent(id));
       if (ticket !== stamp || currentRoute() !== 'exams/result') return;
       var score = attempt.score;
-      app.innerHTML = '<a class="back-link" href="#/exams">‹ 返回个人考试</a><div class="glass exam-result"><span class="exam-eyebrow">' +
+      app.innerHTML = '<a class="back-link" href="' + catalogUrl(pack.level, pack.year, pack.month) + '">‹ 返回个人考试</a><div class="glass exam-result"><span class="exam-eyebrow">' +
         esc(pack.title) + '</span><h2>' + esc(sectionName(pack, attempt.section_id)) + '</h2><div class="exam-score">' + score.correct +
         '<small> / ' + score.total + '</small></div><p>' + (score.accuracy == null ? '本次暂无可计分题目' : '正确率 ' + score.accuracy + '%') + ' · 未答 ' + (score.unanswered == null ? score.total - score.answered : score.unanswered) +
         ' 题' + (score.excluded ? ' · 待核对 ' + score.excluded + ' 题不计分' : '') + '</p><p class="muted">按上传资料中的参考答案批改；这里展示练习正确率。</p></div>' +
@@ -390,11 +439,12 @@
           '</h3><span class="exam-verdict ' + (q.is_graded === false ? 'pending' : q.is_correct ? 'correct' : 'wrong') + '">' + (q.is_graded === false ? '待核对 · 不计分' : q.is_correct ? '答对' : q.selected == null ? '未作答' : '答错') +
           '</span></div><p>你的答案：' + (q.selected == null ? '未答' : q.selected) + '　参考答案：<b>' + (q.correct == null ? '待核对' : q.correct) + '</b></p>' +
           (q.review_notice ? '<p class="exam-review-notice">' + esc(q.review_notice) + '</p>' : '') + textQuestion(pack, q) +
-          '<div class="exam-scan-scroll"><div>' + images(pack.id, q.assets, id) + '</div></div><details class="exam-explanation" open><summary>解析 / 听力原文</summary>' +
+          originalPaper(pack, q, id) + '<details class="exam-explanation" open><summary>解析 / 听力原文</summary>' +
           fragmentsHtml(q.explanation_fragments) + fragmentsHtml(q.transcript_fragments) +
           sourceNotes(pack, q) +
           ((q.explanation_pages || []).length ? '<p class="muted">对应上传资料第 ' + q.explanation_pages.join('、') + ' 页；点按原图可全屏放大查看。</p>' : '') +
-          images(pack.id, q.explanation_assets || (q.explanation_pages || []).map(function (page) { return 'answers/' + String(page).padStart(2, '0') + '.webp'; }), id) + '</details>';
+          '<details class="exam-original"><summary>解析原页对照</summary>' +
+          images(pack.id, q.explanation_assets || (q.explanation_pages || []).map(function (page) { return 'answers/' + String(page).padStart(2, '0') + '.webp'; }), id) + '</details></details>';
         document.querySelectorAll('[data-review]').forEach(function (b) { b.classList.toggle('is-current', b.dataset.review === q.id); });
       }
       function draw() {

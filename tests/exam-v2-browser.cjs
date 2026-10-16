@@ -36,12 +36,14 @@ const fixture = { ...clone(original), sections: [
   { id: 'listening', title: '听力', minutes: 50, question_count: 2 }
 ], questions: [first, reading, pending, legacy, listening, listening2] };
 const safeKeys = ['id', 'section_id', 'label', 'short_label', 'group_title', 'instruction', 'option_count', 'assets', 'stem_fragments', 'options', 'material_ids', 'grading_status', 'review_notice'];
-const publicPack = () => ({ ...clone(fixture), questions: fixture.questions.map(q => Object.fromEntries(safeKeys.filter(k => k in q).map(k => [k, q[k]]))),
-  materials: fixture.materials.filter(m => m.section !== 'listening' && m.kind !== 'listening_transcript') });
+const examData = id => id === fixture.id ? fixture : packs.find(p => p.id === id);
+const publicPack = (pack = fixture) => ({ ...clone(pack), questions: pack.questions.map(q => Object.fromEntries(safeKeys.filter(k => k in q).map(k => [k, q[k]]))),
+  materials: pack.materials.filter(m => m.section !== 'listening' && m.kind !== 'listening_transcript') });
 const attempts = new Map();
 const requests = [];
 let serial = 0;
 let failNextSave = false;
+let workerGeneration = 1;
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ5kAAAAASUVORK5CYII=', 'base64');
 const wav = Buffer.alloc(44 + 16000);
 wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16);
@@ -52,7 +54,7 @@ function response(res, value, code = 200, type = 'application/json') {
   res.end(type === 'application/json' ? JSON.stringify(value) : value);
 }
 function result(a) {
-  const questions = fixture.questions.filter(q => q.section_id === a.section_id).map(q => a.all_pending ? { ...q, grading_status: 'withheld', correct: null } : q);
+  const questions = examData(a.exam_id).questions.filter(q => q.section_id === a.section_id).map(q => a.all_pending ? { ...q, grading_status: 'withheld', correct: null } : q);
   const graded = questions.filter(q => q.grading_status !== 'withheld');
   const answered = questions.filter(q => a.answers[q.id] != null).length;
   const correct = graded.filter(q => a.answers[q.id] === q.correct).length;
@@ -68,6 +70,11 @@ const server = http.createServer(async (req, res) => {
   for await (const chunk of req) body += chunk;
   body = body ? JSON.parse(body) : {};
   const endpoint = url.pathname.replace(/^\/api\/private-exams/, '');
+  if (url.pathname === '/sw.js') return response(res, 'fixture nginx forbidden', 403, 'text/plain');
+  if (url.pathname === '/api/app-shell/worker') {
+    res.writeHead(200, { 'Content-Type': 'text/javascript', 'Service-Worker-Allowed': '/', 'Cache-Control': 'no-store' });
+    return res.end(fs.readFileSync(path.join(frontend, 'sw.js'), 'utf8') + '\n// fixture generation ' + workerGeneration);
+  }
   if (url.pathname === '/preview-exam') return response(res, '<script>localStorage.setItem("yuyu_token","fixture");localStorage.setItem("yuyu_username","fixture");location.replace("/#/exams")</script>', 200, 'text/html; charset=utf-8');
   if (url.pathname.startsWith('/api/private-exams')) {
     if (endpoint === '/media-session') return response(res, {});
@@ -79,7 +86,7 @@ const server = http.createServer(async (req, res) => {
     if (history) {
       if (req.method === 'GET') return response(res, { attempts: [...attempts.values()].filter(a => a.exam_id === history[1]).map(a => a.status === 'submitted' ? result(a) : a) });
       const a = { id: 'fixture-' + ++serial, exam_id: history[1], section_id: body.section_id, mode: body.mode, status: 'active',
-        started_at: Date.now() / 1000, server_now: Date.now() / 1000, deadline_at: null, answers: {}, marked: {}, cursor: fixture.questions.find(q => q.section_id === body.section_id).id, audio_position: 0 };
+        started_at: Date.now() / 1000, server_now: Date.now() / 1000, deadline_at: null, answers: {}, marked: {}, cursor: examData(history[1]).questions.find(q => q.section_id === body.section_id).id, audio_position: 0 };
       attempts.set(a.id, a); return response(res, a);
     }
     const attempt = endpoint.match(/^\/attempts\/([^/]+)(\/submit)?$/);
@@ -96,7 +103,8 @@ const server = http.createServer(async (req, res) => {
       if (attempt[2]) a.status = 'submitted';
       return response(res, a.status === 'submitted' ? result(a) : a);
     }
-    if (endpoint === '/' + fixture.id) return response(res, publicPack());
+    const requestedPack = examData(endpoint.slice(1));
+    if (requestedPack) return response(res, publicPack(requestedPack));
     return response(res, { detail: 'Unimplemented fixture route' }, 404);
   }
   if (url.pathname.startsWith('/api/')) return response(res, { ui_lang: 'zh' });
@@ -125,24 +133,36 @@ async function main() {
       const errors = [];
       page.on('pageerror', e => errors.push(e.message));
       await page.goto(base + '/preview-exam');
-      await page.locator('.exam-pack').waitFor();
+      await page.locator('[data-level]').first().waitFor();
       const historyCount = () => requests.filter(r => r.method === 'GET' && /\/[^/]+\/attempts$/.test(r.path)).length;
-      assert.equal(historyCount(), 1, 'Initial catalog fetches one selected history');
+      assert.equal(historyCount(), 0, 'Initial level page never loads all exam histories');
+      assert.deepEqual(await page.locator('[data-level]').allTextContents().then(texts => texts.map(t => t.match(/N[1-5]/)[0])), ['N5','N4','N3','N2','N1']);
+      assert.equal(await page.locator('.exam-pack').count(), 0, 'No entire library shown at entry');
+      await page.screenshot({ path: path.join(output, 'levels-' + width + '.png'), fullPage: true });
+      await page.locator('[data-level="N5"]').click();
+      await page.getByText('N5 暂未导入试卷。当前可使用 N1、N2 资料。').waitFor();
+      await page.getByRole('link', { name: '级别', exact: true }).click();
       await page.locator('[data-level="N2"]').click();
-      await page.locator('#exam-year').waitFor();
-      assert.equal(historyCount(), 2, 'Level selection fetches only its selected history');
-      await page.locator('#exam-year').selectOption('2025');
-      await page.locator('#exam-period').waitFor();
-      await page.locator('#exam-period').selectOption('7');
+      await page.locator('[data-year="2025"]').waitFor();
+      assert.equal(historyCount(), 0, 'Selecting level only lists years');
+      assert.equal(await page.locator('[data-month]').count(), 0);
+      await page.screenshot({ path: path.join(output, 'years-' + width + '.png'), fullPage: true });
+      await page.locator('[data-year="2025"]').click();
+      await page.locator('[data-month="7"]').waitFor();
+      assert.equal(historyCount(), 0, 'Selecting year only lists months');
+      await page.screenshot({ path: path.join(output, 'months-' + width + '.png'), fullPage: true });
+      await page.locator('[data-month="7"]').click();
       await page.getByRole('heading', { name: /2025.*7/ }).waitFor();
-      assert.equal(historyCount(), 4, 'Each catalog filter fetches one history');
-      await page.locator('#exam-year').selectOption('2026');
+      assert.equal(historyCount(), 1, 'Only the chosen month loads its history');
+      await page.getByRole('link', { name: 'N2', exact: true }).click();
+      await page.locator('[data-year="2026"]').click();
+      await page.locator('[data-month="7"]').click();
       await page.locator('[data-start="' + fixture.id + '"][data-section="language"][data-mode="practice"]').waitFor();
-      const tabs = await page.locator('[data-level]').evaluateAll(elements => elements.map(el => ({ x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y })));
-      assert.equal(tabs[0].y, tabs[1].y, 'Level tabs share one row');
+      assert.equal(historyCount(), 2);
+      assert.equal(await page.locator('.exam-pack').count(), 1);
       await page.screenshot({ path: path.join(output, 'catalog-' + width + '.png'), fullPage: true });
       await page.evaluate(() => document.documentElement.dataset.theme = 'dark');
-      const selectColors = await page.locator('#exam-year').evaluate(el => ({ text: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }));
+      const selectColors = await page.locator('.exam-breadcrumb').evaluate(el => ({ text: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }));
       assert.notEqual(selectColors.text, selectColors.bg, 'Dark catalog controls remain readable');
       await page.screenshot({ path: path.join(output, 'catalog-dark-' + width + '.png'), fullPage: true });
       await page.evaluate(() => document.documentElement.dataset.theme = 'light');
@@ -155,6 +175,9 @@ async function main() {
       assert.equal(await page.locator('#exam-question img[src="x"]').count(), 0, 'Markup is escaped');
       assert.equal(await page.evaluate(() => window.fixtureXss), undefined);
       assert.doesNotMatch(await page.locator('#app').innerText(), /FIXTURE_EXPLANATION|FIXTURE_TRANSCRIPT|FIXTURE_SOURCE_NOTE|参考答案/);
+      assert.equal(await page.locator('.exam-original').getAttribute('open'), null, 'Text is primary and scan is collapsed');
+      assert.equal(await page.locator('.exam-scan').isVisible(), false);
+      await page.screenshot({ path: path.join(output, 'text-question-' + width + '.png'), fullPage: true });
       await page.locator('.exam-original summary').click();
       await page.waitForFunction(() => document.querySelector('.exam-scan')?.naturalWidth > 0);
       assert.ok((await page.locator('.exam-scan').first().getAttribute('src')).endsWith('?attempt=' + a.id));
@@ -179,8 +202,11 @@ async function main() {
       await page.locator('.exam-review-notice').waitFor();
       await page.locator('[data-choice="2"]').click();
       await page.locator('[data-question="legacy"]').click();
+      assert.equal(await page.locator('.exam-original').getAttribute('open'), null, 'Old image-only questions no longer expand full PDF pages by default');
+      assert.equal(await page.locator('.exam-scan').isVisible(), false);
+      assert.match(await page.locator('#exam-question').innerText(), /尚无文字内容/);
+      await page.locator('.exam-original summary').click();
       await page.waitForFunction(() => document.querySelector('.exam-scan')?.naturalWidth > 0);
-      assert.equal(await page.locator('.exam-original').count(), 0, 'Legacy scan remains directly visible');
       assert.equal(await page.locator('.exam-text-option').count(), 0);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No viewport overflow');
       await page.locator('#exam-submit').click();
@@ -232,9 +258,37 @@ async function main() {
       assert.match(await page.locator('#exam-review-question').innerText(), /没有已判分/);
       assert.ok(requests.some(r => r.path === '/api/private-exams/' + fixture.id && r.search === '?attempt=' + a.id), 'Pack request is pinned');
       assert.deepEqual(errors, []);
-      console.log('PASS ' + width + 'px: catalog filtering/one history, numbered text, Unicode underline, shared reading/table, XSS escaping, snapshot URLs, legacy scans, failed save/resume, withheld grading, post-submit explanation/transcript, listening controls');
+      await page.goto(base + '/#/exams?level=N1&year=2019&month=7');
+      await page.locator('[data-start][data-section="language"][data-mode="practice"]').click();
+      await page.locator('#exam-question .exam-text-option').first().waitFor();
+      assert.match(await page.locator('#exam-question').innerText(), /猛烈に腹が立った/);
+      assert.equal(await page.locator('.exam-scan').first().isVisible(), false);
+      await page.screenshot({ path: path.join(output, 'n1-2019-07-text-' + width + '.png'), fullPage: true });
+      console.log('PASS ' + width + 'px: N5-N1 -> year -> month, one chosen history, text-first/collapsed scans, Unicode underline, shared reading/table, failed save/resume, immutable old records, withheld grading, post-submit explanations and listening controls');
       await context.close();
     }
+    const swContext = await browser.newContext({ serviceWorkers: 'allow' });
+    const swPage = await swContext.newPage();
+    await swContext.addInitScript(() => sessionStorage.setItem('yuyu_sw_reloaded', '1'));
+    await swPage.goto(base + '/preview-exam');
+    await swPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.endsWith('/api/app-shell/worker'));
+    const cached = await swPage.evaluate(async () => ({
+      keys: await caches.keys(),
+      textScript: !!await caches.match('/exams.js?v=1.5.1'),
+      shell: !!await caches.match('/index.html')
+    }));
+    assert.ok(cached.keys.includes('yuyu-v33-exam-catalog') && cached.textScript && cached.shell,
+      'Worker served from API path caches root versioned assets, despite /sw.js being 403');
+    const reloaded = swPage.waitForEvent('framenavigated', { predicate: frame => frame === swPage.mainFrame() });
+    workerGeneration++;
+    await swPage.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+    await reloaded;
+    await swPage.locator('[data-level="N1"]').waitFor();
+    await swContext.setOffline(true);
+    await swPage.reload();
+    assert.equal(await swPage.evaluate(() => window.APP_VERSION), '1.5.1', 'Fresh shell and scripts still load offline');
+    await swContext.close();
+    console.log('PASS real service worker: /sw.js 403, API worker root scope, versioned shell cache, reload after another update in the same tab, offline shell');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; server.close(); });
