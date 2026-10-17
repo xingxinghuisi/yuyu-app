@@ -1,12 +1,12 @@
 /* 语屿 Kotoba · Service Worker（极简版） */
-var CACHE_NAME = 'yuyu-v33-exam-catalog';
+var CACHE_NAME = 'yuyu-v34-voice-mini-feedback';
 var ASSETS = [
   './',
   './index.html',
-  './styles.css',
-  './app.js?v=1.5.1',
-  './exams.js?v=1.5.1',
-  './exams.css?v=1.5.1',
+  './styles.css?v=1.6.0',
+  './app.js?v=1.6.0',
+  './exams.js?v=1.6.0',
+  './exams.css?v=1.6.0',
   './map-model.js',
   './map.js',
   './map.css',

@@ -10,7 +10,7 @@
 'use strict';
 
 /* 前端版本号（我的页页脚展示；发版改前端文件时同步 bump） */
-var APP_VERSION = '1.5.1';
+var APP_VERSION = '1.6.0';
 
 /* ================= 0. 基础工具 ================= */
 
@@ -280,13 +280,107 @@ function stopAmbientPetals() {
 
 /* ================= 3. 日语 TTS ================= */
 /* 发音偏好：localStorage 持久化 */
+var VOICE_VOLUME_KEY = 'yuyu_voice_volume';
+function normalizeVoiceVolume(value) {
+  if (value == null || value === '') return 1;
+  var volume = Number(value);
+  return Number.isFinite(volume) ? Math.max(0, Math.min(2, volume)) : 1;
+}
+var _voiceVolume = 1;
+try { _voiceVolume = normalizeVoiceVolume(localStorage.getItem(VOICE_VOLUME_KEY)); } catch (e) {}
+var _voiceContext = null, _voiceGain = null, _voiceLimiter = null, _voiceSource = null, _voiceGraphFailed = false;
+var _ttsUtterance = null;
+function voiceGraph() {
+  if (_voiceGraphFailed) return null;
+  if (_voiceContext) return _voiceContext;
+  var Context = window.AudioContext || window.webkitAudioContext;
+  if (!Context) return null;
+  try {
+    _voiceContext = new Context();
+    _voiceGain = _voiceContext.createGain();
+    _voiceLimiter = _voiceContext.createDynamicsCompressor();
+    _voiceLimiter.threshold.value = -1;
+    _voiceLimiter.knee.value = 0;
+    _voiceLimiter.ratio.value = 20;
+    _voiceLimiter.attack.value = 0.003;
+    _voiceLimiter.release.value = 0.08;
+    _voiceGain.connect(_voiceLimiter);
+    _voiceLimiter.connect(_voiceContext.destination);
+    return _voiceContext;
+  } catch (e) { _voiceGraphFailed = true; return null; }
+}
+function disconnectVoiceSource(audio) {
+  if (_voiceSource && _voiceSource.audio === audio) {
+    try { _voiceSource.node.disconnect(); } catch (e) {}
+    _voiceSource = null;
+  }
+}
+function applyVoiceVolume(audio) {
+  if (!audio) return;
+  audio.muted = _voiceVolume === 0;
+  var context = _voiceContext;
+  if (!_voiceSource && (_voiceVolume !== 1 || _voiceContext) && audio._voiceBoostAllowed) {
+    context = voiceGraph();
+    // Keep normal media playback until a user gesture has unlocked Web Audio.
+    // Connecting a suspended context would otherwise turn audible audio silent.
+    if (context && context.state === 'running') {
+      try {
+        var source = context.createMediaElementSource(audio);
+        source.connect(_voiceGain);
+        _voiceSource = { audio: audio, node: source };
+      } catch (e) { _voiceGraphFailed = true; }
+    }
+  }
+  if (_voiceSource && _voiceSource.audio === audio) {
+    audio.volume = 1;
+    _voiceGain.gain.setTargetAtTime(_voiceVolume, _voiceContext.currentTime, 0.015);
+  } else { audio.volume = Math.min(1, _voiceVolume); }
+}
+function unlockVoiceVolume() {
+  if (_voiceVolume === 1 && !_voiceContext) return;
+  var context = voiceGraph();
+  if (context && context.state !== 'running') {
+    try { context.resume().then(function () { applyVoiceVolume(_audioEl); }).catch(function () {}); } catch (e) {}
+  }
+}
+function syncVoiceVolumeControls() {
+  var percent = Math.round(_voiceVolume * 100);
+  $$('[data-voice-volume]').forEach(function (input) { input.value = percent; });
+  $$('[data-voice-volume-value]').forEach(function (output) { output.textContent = percent + '%'; });
+  $$('[data-voice-volume-toggle]').forEach(function (toggle) {
+    toggle.setAttribute('aria-label', '调节发音音量，当前' + (percent ? percent + '%' : '静音'));
+  });
+}
+function setVoiceVolume(value, persist) {
+  _voiceVolume = normalizeVoiceVolume(value);
+  if (persist !== false) { try { localStorage.setItem(VOICE_VOLUME_KEY, String(_voiceVolume)); } catch (e) {} }
+  unlockVoiceVolume();
+  applyVoiceVolume(_audioEl);
+  if (_ttsUtterance) {
+    _ttsUtterance.volume = Math.min(1, _voiceVolume);
+    if (_voiceVolume === 0) { try { window.speechSynthesis.cancel(); } catch (e) {} _ttsUtterance = null; }
+  }
+  syncVoiceVolumeControls();
+}
+document.addEventListener('input', function (event) {
+  if (event.target.matches('[data-voice-volume]')) setVoiceVolume(Number(event.target.value) / 100);
+});
+document.addEventListener('pointerdown', unlockVoiceVolume, true);
+document.addEventListener('keydown', function (event) {
+  var control = $('#voice-volume-control');
+  if (event.key === 'Escape' && control && control.open) { control.open = false; control.querySelector('summary').focus(); }
+  if (event.key === 'Enter' || event.key === ' ' || event.key.indexOf('Arrow') === 0) unlockVoiceVolume();
+}, true);
+window.addEventListener('storage', function (event) {
+  if (event.key === VOICE_VOLUME_KEY) setVoiceVolume(event.newValue, false);
+});
 function getVoicePref() {
   try {
     return {
       voice: localStorage.getItem('yuyu_voice') || '',
-      rate: parseFloat(localStorage.getItem('yuyu_rate') || '0.8')
+      rate: parseFloat(localStorage.getItem('yuyu_rate') || '0.8'), volume: _voiceVolume
     };
-  } catch (e) { return { voice: '', rate: 0.8 }; }
+  } catch (e) { return { voice: '', rate: 0.8, volume: _voiceVolume }; }
 }
 function speakTts(text) {
   try {
@@ -296,6 +390,9 @@ function speakTts(text) {
     u.lang = 'ja-JP';
     var pref = getVoicePref();
     u.rate = pref.rate || 0.8;
+    u.volume = Math.min(1, pref.volume);
+    _ttsUtterance = u;
+    u.onend = u.onerror = function () { if (_ttsUtterance === u) _ttsUtterance = null; };
     if (pref.voice) {
       var vs = window.speechSynthesis.getVoices();
       for (var i = 0; i < vs.length; i++) {
@@ -309,17 +406,23 @@ function speakTts(text) {
 var _audioEl = null;
 function speak(text, wordId, audioUrl) {
   try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
-  if (_audioEl) { try { _audioEl.pause(); } catch (e) {} _audioEl = null; }
+  _ttsUtterance = null;
+  if (_audioEl) { try { _audioEl.pause(); } catch (e) {} disconnectVoiceSource(_audioEl); _audioEl = null; }
   if (wordId || audioUrl) {
     var url = audioUrl || '/api/audio/' + encodeURIComponent(wordId) + '.mp3';
     var a = new Audio(url + '?v=' + APP_VERSION);
     _audioEl = a;
+    // Same-origin recordings can be amplified without CORS muting the source.
+    try { a._voiceBoostAllowed = new URL(url, location.href).origin === location.origin; } catch (e) { a._voiceBoostAllowed = /^\/(?!\/)/.test(url); }
+    unlockVoiceVolume();
+    applyVoiceVolume(a);
     /* v0.8.1: 真人 MP3 也服从「我的页→发音设置→语速》(默认 0.8x) */
     try { a.playbackRate = getVoicePref().rate || 1; } catch (e) {}
-    a.onended = function () { if (_audioEl === a) _audioEl = null; };
+    a.onended = function () { disconnectVoiceSource(a); if (_audioEl === a) _audioEl = null; };
     var fallback = function () {
       if (_audioEl !== a) return;
       _audioEl = null;
+      disconnectVoiceSource(a);
       try { a.pause(); } catch (e) {}
       speakTts(text);
     };
@@ -331,6 +434,8 @@ function speak(text, wordId, audioUrl) {
 }
 /* 覆盖新词、复习及详解中动态出现的例句。 */
 document.addEventListener('click', function (event) {
+  var control = $('#voice-volume-control');
+  if (control && control.open && !control.contains(event.target)) control.open = false;
   var button = event.target.closest('.example-speak');
   if (!button) return;
   speak(button.getAttribute('data-text'), null, button.getAttribute('data-audio') || null);
@@ -338,10 +443,12 @@ document.addEventListener('click', function (event) {
 /* 初始化发音设置 UI（我的页） */
 function initVoiceSettings() {
   var sel = $('#sel-voice'), range = $('#range-rate'), rval = $('#rate-val'), test = $('#btn-voice-test');
-  if (!sel || !('speechSynthesis' in window)) return;
+  syncVoiceVolumeControls();
+  if (test) test.addEventListener('click', function () { speak('かける', 'jlpt10k-00377'); });
+  if (!sel) return;
   var pref = getVoicePref();
   var fill = function () {
-    var vs = window.speechSynthesis.getVoices().filter(function (v) {
+    var vs = (window.speechSynthesis ? window.speechSynthesis.getVoices() : []).filter(function (v) {
       return (v.lang || '').toLowerCase().indexOf('ja') === 0;
     });
     sel.innerHTML = '<option value="">系统默认</option>' + vs.map(function (v) {
@@ -350,7 +457,7 @@ function initVoiceSettings() {
     }).join('');
   };
   fill();
-  if (window.speechSynthesis.onvoiceschanged !== undefined) window.speechSynthesis.onvoiceschanged = fill;
+  if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) window.speechSynthesis.onvoiceschanged = fill;
   if (range) {
     range.value = pref.rate;
     if (rval) rval.textContent = 'x' + pref.rate.toFixed(1);
@@ -362,7 +469,6 @@ function initVoiceSettings() {
   sel.addEventListener('change', function () {
     try { localStorage.setItem('yuyu_voice', sel.value); } catch (e) {}
   });
-  if (test) test.addEventListener('click', function () { speak('かける', 'jlpt10k-00377'); });
 }
 
 /* ================= 4. API 封装 ================= */
@@ -422,6 +528,7 @@ function currentRoute() {
 var routes = {}; // 下方各页面注册
 
 function setChrome(route) {
+  syncVoiceVolumeControls();
   document.body.classList.toggle('map-home', route === 'home');
   var authed = !!getToken();
   var inApp = authed && route !== 'login';
@@ -1471,11 +1578,11 @@ function bindQuizOptions(q, session) {
 function startMiniQuiz(wordIds) {
   var session = ST, generation = studyFlowGeneration;
   app.innerHTML = loadingHtml('正在出 3 道小测题…');
-  api('/quiz/start', 'POST', { word_ids: wordIds, count: 3 }).then(function (d) {
+  api('/quiz/start', 'POST', { word_ids: wordIds, count: 3, instant_feedback: true }).then(function (d) {
     if (!studyFlowActive(session, generation)) return;
     var qs = d.questions || [];
     if (!qs.length) { toast('暂无小测题目，继续学习'); renderStudyWord(); return; }
-    MQ = { questions: qs, idx: 0, answers: [], answered: false };
+    MQ = { questions: qs, idx: 0, answers: [], feedback: [], answered: false, checking: false };
     renderMiniQ();
   }).catch(function (err) {
     if (!studyFlowActive(session, generation)) return;
@@ -1487,6 +1594,7 @@ function startMiniQuiz(wordIds) {
 function renderMiniQ() {
   var q = MQ.questions[MQ.idx];
   MQ.answered = false;
+  MQ.checking = false;
   var total = MQ.questions.length;
   app.innerHTML =
     '<div class="mini-quiz-head"><span class="mini-quiz-tag">随堂小测</span>' +
@@ -1494,26 +1602,67 @@ function renderMiniQ() {
     '<div class="quiz-progress"><div class="bar"><i style="width:' + Math.round(MQ.idx / total * 100) + '%"></i></div>' +
     '<div class="txt">第 ' + (MQ.idx + 1) + ' / ' + total + ' 题 · ' + (TYPE_LABEL[q.type] || '') + '</div></div></div>' +
     quizQBody(q) +
-    '<div id="fb-zone"></div>' +
+    '<div id="fb-zone" role="status" aria-live="polite" aria-atomic="true"></div>' +
     '<div id="q-next" class="hidden" style="margin-top:16px"><button class="btn btn-primary" id="btn-mq-next">' +
     (MQ.idx === total - 1 ? '交卷' : '下一题') + '</button></div>';
   bindMiniQ(q);
   var mqe = $('#btn-mq-exit');
   if (mqe) mqe.addEventListener('click', function () { MQ = null; renderStudyWord(); });
   $('#btn-mq-next').addEventListener('click', function () {
-    if (!MQ || !MQ.answered || MQ.done) return;
-    if (MQ.idx === MQ.questions.length - 1) submitMiniQuiz();
-    else { MQ.idx++; renderMiniQ(); }
+    advanceMiniQuiz(MQ, MQ && MQ.idx);
   });
 }
 
+function advanceMiniQuiz(quiz, index) {
+  if (!quiz || MQ !== quiz || quiz.idx !== index || !quiz.answered || quiz.done) return;
+  if (quiz.idx === quiz.questions.length - 1) submitMiniQuiz();
+  else { quiz.idx++; renderMiniQ(); }
+}
+
 function bindMiniQ(q) {
+  var quiz = MQ, index = quiz.idx, session = ST, generation = studyFlowGeneration;
   var type = q.type;
   var kana = q.prompt && q.prompt.kana;
   if (type === 'listening' && kana) later(function () { speak(kana, q.word_id); }, 500);
   var rp = $('#btn-replay');
   if (rp && kana) rp.addEventListener('click', function () { speak(kana, q.word_id); });
-  bindQuizOptions(q, MQ);
+  $$('.option').forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (MQ !== quiz || quiz.idx !== index || quiz.checking || quiz.answered || quiz.done) return;
+      quiz.checking = true;
+      var answer = String(q.options[Number(button.dataset.i)]);
+      var options = $$('.option'), feedback = $('#fb-zone');
+      options.forEach(function (item) { item.disabled = true; });
+      feedback.textContent = '正在核对…';
+      api('/quiz/check', 'POST', { qid: q.qid, answer: answer }).then(function (result) {
+        if (!studyFlowActive(session, generation) || MQ !== quiz || quiz.idx !== index) return;
+        if (result.qid !== q.qid || typeof result.correct !== 'boolean' || q.options.indexOf(result.expected) < 0) throw new Error('答案核对失败，请重试');
+        quiz.answers[index] = { qid: q.qid, answer: answer };
+        quiz.feedback[index] = { correct: result.correct, selected: answer, expected: result.expected,
+          prompt: q.prompt.word || q.prompt.meaning || q.prompt.kana || '' };
+        quiz.answered = true;
+        quiz.checking = false;
+        options.forEach(function (item) {
+          var value = String(q.options[Number(item.dataset.i)]);
+          item.classList.toggle('correct', value === result.expected);
+          item.classList.toggle('wrong', item === button && !result.correct);
+          item.setAttribute('aria-pressed', item === button ? 'true' : 'false');
+        });
+        feedback.innerHTML = '<div class="mini-answer-feedback ' + (result.correct ? 'correct' : 'wrong') + '"><b>' +
+          (result.correct ? '✓ 答对了' : '✕ 选错了') + '</b>' + (result.correct ? '' : '<p>正确答案：' + esc(result.expected) + '</p>') +
+          '<p class="muted">' + (index === quiz.questions.length - 1 ? '即将显示小测结果' : '即将进入下一题') + '</p></div>';
+        $('#q-next').classList.remove('hidden');
+        later(function () {
+          if (studyFlowActive(session, generation)) advanceMiniQuiz(quiz, index);
+        }, result.correct ? 700 : 1500);
+      }).catch(function (error) {
+        if (!studyFlowActive(session, generation) || MQ !== quiz || quiz.idx !== index) return;
+        quiz.checking = false;
+        feedback.textContent = '核对未成功：' + error.message + '。请再点一次选项重试。';
+        options.forEach(function (item) { item.disabled = false; });
+      });
+    });
+  });
 }
 
 function submitMiniQuiz() {
@@ -1536,7 +1685,7 @@ function submitMiniQuiz() {
       });
     });
     chain.then(function () {
-      if (studyFlowActive(session, generation)) renderMiniResult(score, total, wrongIds.length);
+      if (studyFlowActive(session, generation)) renderMiniResult(score, total, wrongIds.length, quiz.feedback);
     });
   }).catch(function (err) {
     if (!studyFlowActive(session, generation)) return;
@@ -1545,7 +1694,7 @@ function submitMiniQuiz() {
   });
 }
 
-function renderMiniResult(score, total, wrongCount) {
+function renderMiniResult(score, total, wrongCount, feedback) {
   if (score === total) celebrate(); else { sakuraBurst(12); vibrate(20); }
   app.innerHTML =
     '<div class="finish-wrap">' + sakuraArt(110) +
@@ -1554,6 +1703,10 @@ function renderMiniResult(score, total, wrongCount) {
     (wrongCount
       ? '<p>答错的 ' + wrongCount + ' 个词已回炉，记得去复习巩固。</p>'
       : '<p>全部答对，完美通关！</p>') +
+    ((feedback || []).some(function (item) { return !item.correct; }) ? '<div class="mini-wrong-review"><h3>错题回顾</h3>' + feedback.map(function (item, index) {
+      return item.correct ? '' : '<article class="glass"><b>第 ' + (index + 1) + ' 题 · ' + esc(item.prompt) + '</b><p>你的选择：' + esc(item.selected) +
+        '</p><p>正确答案：' + esc(item.expected) + '</p></article>';
+    }).join('') + '</div>' : '') +
     '<button class="btn btn-primary" id="btn-mq-continue">继续学习</button></div>';
   $('#btn-mq-continue').addEventListener('click', function () { renderStudyWord(); });
 }
@@ -2245,6 +2398,9 @@ function renderMeVoice() {
     '<div class="glass about-card">' +
       '<h3>发音设置</h3>' +
       '<p class="muted">单词和例句优先使用已安装的 VOICEVOX:No.7 合成语音。未安装或音频不可用时自动回退。</p>' +
+      '<div class="voice-settings-volume"><label for="voice-settings-volume">发音音量 <output data-voice-volume-value>100%</output></label>' +
+      '<input id="voice-settings-volume" data-voice-volume type="range" min="0" max="200" step="5" value="100">' +
+      '<p class="muted">单词、例句和听音小测共用，不改变系统音量。100%以上增强录音；系统回退朗读最高100%。</p></div>' +
       '<div style="margin-bottom:10px"><label class="muted" style="font-size:13px">系统回退发音人</label>' +
       '<select id="sel-voice" class="input" style="width:100%;margin-top:4px"><option value="">系统默认</option></select></div>' +
       '<div><label class="muted" style="font-size:13px">语速 <span id="rate-val" class="muted"></span> <span class="muted" style="font-size:11px">（音频 · 系统 TTS 均适用）</span></label>' +

@@ -9,11 +9,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.6.0">
 <link rel="stylesheet" href="map.css">
 <link rel="stylesheet" href="anime.css">
 <link rel="stylesheet" href="map-sheet.css">
-<link rel="stylesheet" href="exams.css?v=1.5.1">
+<link rel="stylesheet" href="exams.css?v=1.6.0">
 </head>
 <body>
 
@@ -24,10 +24,23 @@
 <header id="topbar" class="topbar hidden">
   <div class="topbar-inner">
     <div class="brand-mini"><a href="#/home" aria-label="回到首页" style="display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none"><span class="brand-mini-icon">屿</span><span class="brand-mini-name">语屿</span></a></div>
+    <div class="topbar-controls">
+    <details class="voice-volume-control" id="voice-volume-control">
+      <summary data-voice-volume-toggle aria-label="调节发音音量，当前100%">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg><span>音量</span>
+      </summary>
+      <div class="voice-volume-panel">
+        <label for="voice-volume-range">发音音量 <output data-voice-volume-value>100%</output></label>
+        <input id="voice-volume-range" data-voice-volume type="range" min="0" max="200" step="5" value="100">
+        <div class="voice-volume-scale"><span>静音</span><span>100%</span><span>200%</span></div>
+        <p>仅调节单词、例句与听音小测，不改变系统音量。</p>
+      </div>
+    </details>
     <button id="theme-toggle" class="icon-btn" aria-label="切换深浅色主题" title="切换深浅色">
       <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>
       <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
     </button>
+    </div>
   </div>
 </header>
 
@@ -76,8 +89,8 @@
 <script src="map-model.js"></script>
 <script src="map.js"></script>
 <script src="map-art.js"></script>
-<script src="exams.js?v=1.5.1"></script>
-<script src="app.js?v=1.5.1"></script>
+<script src="exams.js?v=1.6.0"></script>
+<script src="app.js?v=1.6.0"></script>
 <script>
 // 注册 Service Worker（PWA 离线能力）；每次启动主动检查更新，避免旧前端滞留
 // 每次新 worker 接管后刷新一次；同一标签页也能接收第二次发版。

@@ -316,10 +316,10 @@ class PrivateExamTests(unittest.TestCase):
         self.assertEqual(worker.status_code, 200)
         self.assertIn('no-store', worker.headers['cache-control'])
         self.assertEqual(worker.headers['service-worker-allowed'], '/')
-        self.assertIn('yuyu-v33-exam-catalog', worker.text)
-        shell = self.client.get('/app-update?v=1.5.1')
+        self.assertIn('yuyu-v34-voice-mini-feedback', worker.text)
+        shell = self.client.get('/app-update?v=1.6.0')
         self.assertEqual(shell.status_code, 200)
-        self.assertIn('exams.js?v=1.5.1', shell.text)
+        self.assertIn('exams.js?v=1.6.0', shell.text)
 
 
 if __name__ == '__main__':

@@ -40,8 +40,8 @@ test('an uncached navigation falls back to the saved HTML shell offline',async()
 test('worker at the API URL still precaches root shell resources and versioned exam assets',()=>{
   const {context}=worker();
   assert.ok(context.ASSETS.every(url=>url.startsWith('/') && !url.startsWith('/api/')));
-  assert.ok(context.ASSETS.includes('/exams.js?v=1.5.1'));
+  assert.ok(context.ASSETS.includes('/exams.js?v=1.6.0'));
   const {handlers}=worker();let intercepted=false;
-  handlers.fetch({request:{method:'GET',url:'https://kotoba.test/app-update?v=1.5.1'},respondWith:()=>intercepted=true});
+  handlers.fetch({request:{method:'GET',url:'https://kotoba.test/app-update?v=1.6.0'},respondWith:()=>intercepted=true});
   assert.equal(intercepted,false);
 });

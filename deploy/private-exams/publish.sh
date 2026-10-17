@@ -42,7 +42,7 @@ if [[ -z $app_dir ]]; then
   app_dir=${candidates[0]}
 fi
 is_yuyu_repo "$app_dir" || { echo 'Selected directory is not the existing yuyu repository.' >&2; exit 1; }
-curl -fL --retry 0 --connect-timeout 20 'https://raw.githubusercontent.com/xingxinghuisi/yuyu-app/v1.5.1/deploy/update-yuyu.sh' -o "$kit/update-yuyu.sh"
+curl -fL --retry 0 --connect-timeout 20 'https://raw.githubusercontent.com/xingxinghuisi/yuyu-app/v1.6.0/deploy/update-yuyu.sh' -o "$kit/update-yuyu.sh"
 bash "$kit/update-yuyu.sh" "$app_dir"
 container=$(cd -- "$app_dir" && "${docker_cmd[@]}" compose ps -q yuyu)
 [[ -n $container && $container != *$'\n'* ]] || { echo 'Expected one running yuyu container.' >&2; exit 1; }

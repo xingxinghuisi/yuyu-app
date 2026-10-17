@@ -2,7 +2,7 @@
 # Run on the existing VPS; private data and audio remain in the mounted data directory.
 set -euo pipefail
 
-version=v1.5.1
+version=v1.6.0
 branch=feat/anime-archipelago
 if [[ ${1:-} == --help ]]; then
   echo 'Usage: bash update-yuyu.sh [existing-yuyu-repository-directory]'
@@ -68,7 +68,7 @@ import os, sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 data = Path(os.environ.get("DATA_DIR", "/data"))
-backup = data / "backups" / ("before-v1.5.1-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
+backup = data / "backups" / ("before-v1.6.0-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
 backup.mkdir(parents=True, mode=0o700)
 private = Path(os.environ.get("PRIVATE_EXAMS_DIR", str(data / "private-exams")))
 for source, name in ((data / "app.db", "app.db"), (private / "attempts.sqlite3", "exam-attempts.sqlite3")):
@@ -101,11 +101,11 @@ base = "http://127.0.0.1:8000"
 with urllib.request.urlopen(base + "/api/health", timeout=3) as r:
     assert json.load(r)["ok"] is True
 with urllib.request.urlopen(base + "/app.js", timeout=3) as r:
-    assert "var APP_VERSION = '\''1.5.1'\'';" in r.read().decode("utf-8")
+    assert "var APP_VERSION = '\''1.6.0'\'';" in r.read().decode("utf-8")
 with urllib.request.urlopen(base + "/api/app-shell/worker", timeout=3) as r:
     assert r.headers["Service-Worker-Allowed"] == "/"
-with urllib.request.urlopen(base + "/app-update?v=1.5.1", timeout=3) as r:
-    assert "exams.js?v=1.5.1" in r.read().decode("utf-8")
+with urllib.request.urlopen(base + "/app-update?v=1.6.0", timeout=3) as r:
+    assert "exams.js?v=1.6.0" in r.read().decode("utf-8")
 ' >/dev/null 2>&1; then
     healthy=true
     break
@@ -118,4 +118,4 @@ if ! $healthy; then
   exit 1
 fi
 echo "DEPLOY_OK=$version; commit=$target; previous=$previous"
-echo 'Refresh the app to load the update. Private exam files require separate installation if not already present.'
+echo 'Open /app-update?v=1.6.0 once on your website to load the updated interface. Existing learning, audio and exam data are preserved.'

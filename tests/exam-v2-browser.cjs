@@ -274,10 +274,10 @@ async function main() {
     await swPage.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.endsWith('/api/app-shell/worker'));
     const cached = await swPage.evaluate(async () => ({
       keys: await caches.keys(),
-      textScript: !!await caches.match('/exams.js?v=1.5.1'),
+      textScript: !!await caches.match('/exams.js?v=1.6.0'),
       shell: !!await caches.match('/index.html')
     }));
-    assert.ok(cached.keys.includes('yuyu-v33-exam-catalog') && cached.textScript && cached.shell,
+    assert.ok(cached.keys.includes('yuyu-v34-voice-mini-feedback') && cached.textScript && cached.shell,
       'Worker served from API path caches root versioned assets, despite /sw.js being 403');
     const reloaded = swPage.waitForEvent('framenavigated', { predicate: frame => frame === swPage.mainFrame() });
     workerGeneration++;
@@ -286,7 +286,7 @@ async function main() {
     await swPage.locator('[data-level="N1"]').waitFor();
     await swContext.setOffline(true);
     await swPage.reload();
-    assert.equal(await swPage.evaluate(() => window.APP_VERSION), '1.5.1', 'Fresh shell and scripts still load offline');
+    assert.equal(await swPage.evaluate(() => window.APP_VERSION), '1.6.0', 'Fresh shell and scripts still load offline');
     await swContext.close();
     console.log('PASS real service worker: /sw.js 403, API worker root scope, versioned shell cache, reload after another update in the same tab, offline shell');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }

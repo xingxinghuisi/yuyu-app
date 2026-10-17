@@ -590,6 +590,27 @@ html[data-theme="dark"] .badge-en { color: var(--gold); }
 .word-mask .mask-icon svg { width: 26px; height: 26px; }
 .word-mask p { font-size: 14px; color: var(--ink-soft); margin: 0; }
 .option:disabled { cursor: default; }
+.option.correct:disabled,.option.wrong:disabled { opacity:1; }
+.mini-answer-feedback { margin-top:16px;padding:14px 16px;border-radius:16px;line-height:1.7;overflow-wrap:anywhere; }
+.mini-answer-feedback.correct { border:1px solid #3a9e5f;background:color-mix(in srgb,#3a9e5f 12%,transparent); }
+.mini-answer-feedback.wrong { border:1px solid var(--vermilion);background:color-mix(in srgb,var(--vermilion) 10%,transparent); }
+.mini-answer-feedback p { margin:4px 0 0; }
+.mini-wrong-review { text-align:left;margin:20px 0; }
+.mini-wrong-review h3 { font-size:16px; }
+.mini-wrong-review article { padding:14px 16px;margin:10px 0;border-radius:16px;line-height:1.7;overflow-wrap:anywhere; }
+.mini-wrong-review p { margin:5px 0;font-size:14px; }
+.topbar-controls { display:flex;align-items:center;gap:12px; }
+.voice-volume-control { position:relative;font-size:13px; }
+.voice-volume-control>summary { display:flex;gap:5px;align-items:center;cursor:pointer;list-style:none;padding:9px;border-radius:12px; }
+.voice-volume-control>summary::-webkit-details-marker { display:none; }
+.voice-volume-control>summary svg { width:20px;height:20px; }
+.voice-volume-control>summary:focus-visible { outline:2px solid var(--vermilion);outline-offset:2px; }
+.voice-volume-panel { position:absolute;right:0;top:calc(100% + 10px);width:min(290px,calc(100vw - 52px));padding:18px;border:1px solid var(--glass-border);border-radius:18px;background:var(--paper);color:var(--ink);box-shadow:0 12px 36px rgba(0,0,0,.15);z-index:90;box-sizing:border-box; }
+.voice-volume-panel label,.voice-settings-volume label { display:flex;justify-content:space-between;align-items:center;font-weight:650;gap:12px; }
+.voice-volume-panel input,.voice-settings-volume input { width:100%;height:32px;accent-color:var(--vermilion);margin:8px 0 0;cursor:pointer; }
+.voice-volume-scale { display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft); }
+.voice-volume-panel p,.voice-settings-volume p { font-size:12px;line-height:1.6;margin:10px 0 0;color:var(--ink-soft); }
+.voice-settings-volume { margin-bottom:22px; }
 
 .spell-input {
   width: 100%;

@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 from . import auth, seed_db, srs, vocab_catalog, source_audio, voicevox_audio, private_exams
 
@@ -245,6 +245,7 @@ class QuizStartIn(BaseModel):
     count: int = Field(default=20, ge=1, le=50)
     word_ids: list[str] | None = None
     mode: str = "normal"  # normal | exam_freq | jees_sample
+    instant_feedback: StrictBool = False
 
 
 class QuizAnswerItem(BaseModel):
@@ -621,6 +622,8 @@ def quiz_start(body: QuizStartIn, user: dict = Depends(current_user)):
     level = body.level or "N5"
     if level not in LEVELS:
         raise HTTPException(status_code=400, detail="invalid level")
+    if body.instant_feedback and (body.word_ids is None or body.mode != "normal"):
+        raise HTTPException(status_code=400, detail="即时反馈仅用于指定学习词的小测")
     lang = user.get("lang") or "zh"
     conn = get_db()
     try:
@@ -721,12 +724,27 @@ def quiz_start(body: QuizStartIn, user: dict = Depends(current_user)):
             distract = _distinct_samples(rows, dm, lambda x: display_meaning(x, lang)[0], 3)
             options = [expected] + distract
             random.shuffle(options)
-        QUIZ_STORE[(user["id"], qid)] = {"word_id": w["id"], "type": t, "expected": expected}
+        QUIZ_STORE[(user["id"], qid)] = {"word_id": w["id"], "type": t, "expected": expected,
+                                        "instant_feedback": body.instant_feedback}
         q = {"qid": qid, "type": t, "word_id": w["id"], "prompt": prompt}
         if options is not None:
             q["options"] = options
         questions.append(q)
     return {"questions": questions}
+
+
+@app.post("/api/quiz/check")
+def quiz_check(body: QuizAnswerItem, user: dict = Depends(current_user)):
+    # Checking a mini-quiz answer must not consume it, submit the whole quiz,
+    # or apply learning grades. Final submission retains the existing contract.
+    with _write_lock:
+        entry = QUIZ_STORE.get((user["id"], body.qid))
+        if entry is None:
+            raise HTTPException(status_code=404, detail="小测题目已失效，请重新开始")
+        if not entry.get("instant_feedback"):
+            raise HTTPException(status_code=403, detail="此测验在交卷后查看答案")
+        expected = str(entry["expected"])
+        return {"qid": body.qid, "correct": body.answer == expected, "expected": expected}
 
 
 @app.post("/api/quiz/submit")
